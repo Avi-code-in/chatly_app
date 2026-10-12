@@ -1,26 +1,36 @@
 {
   "project_info": {
-    "project_number": "263964932908",
-    "project_id": "convox-e980c",
-    "storage_bucket": "convox-e980c.firebasestorage.app"
+    "project_number": "822803436237",
+    "project_id": "chatly-app-3517f",
+    "storage_bucket": "chatly-app-3517f.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:263964932908:android:e3570a5c781ebc58064a89",
+        "mobilesdk_app_id": "1:822803436237:android:dcd87eb5943f95418d0f84",
         "android_client_info": {
-          "package_name": "com.convox.app"
+          "package_name": "com.example.chatly_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "822803436237-10mup0hu16fa6otnm0u1sc1mpppbil3o.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyD9t4mIWDN4chKsEnWDjXabs9B4x82EZJ8"
+          "current_key": "AIzaSyBB4JdE9MRVKzSVd9VM1WSpc3jbB46M-9Q"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "822803436237-10mup0hu16fa6otnm0u1sc1mpppbil3o.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
