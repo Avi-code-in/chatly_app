@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("com.google.gms.google-services")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -22,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.chatly_app"
-        minSdk = flutter.minSdkVersion
+        minSdk = 23  // <--- YAHAN CHANGE KIYA HAI
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
