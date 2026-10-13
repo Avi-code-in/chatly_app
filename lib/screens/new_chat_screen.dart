@@ -1,10 +1,27 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/chat_service.dart';
+import '../models/user_model.dart';
 import '../theme.dart';
 import 'chat_screen.dart';
 
-class NewChatScreen extends StatelessWidget {
+class NewChatScreen extends StatefulWidget {
   const NewChatScreen({super.key});
+
+  @override
+  State<NewChatScreen> createState() => _NewChatScreenState();
+}
+
+class _NewChatScreenState extends State<NewChatScreen> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +41,8 @@ class NewChatScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
+              controller: _searchController,
+              onChanged: (v) => setState(() => _query = v.toLowerCase()),
               decoration: InputDecoration(
                 hintText: 'Search contacts...',
                 prefixIcon: const Icon(Icons.search,
@@ -34,76 +53,60 @@ class NewChatScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   borderSide: BorderSide.none,
                 ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 16),
               ),
             ),
           ),
           Expanded(
-            child: StreamBuilder(
+            child: StreamBuilder<List<UserModel>>(
               stream: chatService.getUsers(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.primary),
+                    child: CircularProgressIndicator(
+                        color: AppColors.primary),
                   );
                 }
 
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          size: 80,
-                          color: AppColors.textSecondary.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Abhi koi user registered nahi hai',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Dusre logon ko bolo app install karein',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                  return const Center(
+                    child: Text(
+                      'Abhi koi user registered nahi hai',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 15,
+                      ),
                     ),
                   );
                 }
 
-                final users = snapshot.data!;
+                final users = snapshot.data!.where((u) {
+                  return u.name.toLowerCase().contains(_query) ||
+                      u.email.toLowerCase().contains(_query);
+                }).toList();
+
+                if (users.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Koi contact nahi mila',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 15,
+                      ),
+                    ),
+                  );
+                }
+
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: users.length,
                   itemBuilder: (context, index) {
                     final user = users[index];
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      leading: CircleAvatar(
-                        radius: 28,
-                        backgroundColor:
-                            AppColors.primary.withOpacity(0.15),
-                        child: Text(
-                          user.name.isNotEmpty
-                              ? user.name[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ),
+                          horizontal: 20, vertical: 6),
+                      leading: _avatar(user, 26),
                       title: Text(
                         user.name,
                         style: const TextStyle(
@@ -113,9 +116,11 @@ class NewChatScreen extends StatelessWidget {
                         ),
                       ),
                       subtitle: Text(
-                        user.email,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
+                        user.isOnline ? 'Online' : 'Last seen recently',
+                        style: TextStyle(
+                          color: user.isOnline
+                              ? Colors.green
+                              : AppColors.textSecondary,
                           fontSize: 13,
                         ),
                       ),
@@ -129,6 +134,7 @@ class NewChatScreen extends StatelessWidget {
                               builder: (_) => ChatScreen(
                                 chatId: chatId,
                                 otherUserName: user.name,
+                                otherUserPhoto: user.photoUrl,
                               ),
                             ),
                           );
@@ -143,5 +149,52 @@ class NewChatScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _avatar(UserModel user, double radius) {
+    final hasImage = user.photoUrl != null &&
+        user.photoUrl!.startsWith('data:image');
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: radius,
+          backgroundColor: AppColors.primary.withOpacity(0.15),
+          backgroundImage: hasImage
+              ? MemoryImage(_decodeBase64(user.photoUrl!))
+              : null,
+          child: !hasImage
+              ? Text(
+                  user.name.isNotEmpty
+                      ? user.name[0].toUpperCase()
+                      : '?',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: radius * 0.7,
+                  ),
+                )
+              : null,
+        ),
+        if (user.isOnline)
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: Container(
+              width: radius * 0.5,
+              height: radius * 0.5,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.white, width: 2),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Uint8List _decodeBase64(String dataUrl) {
+    final base64String = dataUrl.split(',').last;
+    return base64Decode(base64String);
   }
 }

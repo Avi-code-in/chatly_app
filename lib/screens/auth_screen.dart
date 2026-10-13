@@ -34,6 +34,7 @@ class _AuthScreenState extends State<AuthScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
+        await _chatService.updateOnlineStatus(true);
       } else {
         if (_nameController.text.trim().isEmpty) {
           throw Exception('Naam daalo');
@@ -62,9 +63,7 @@ class _AuthScreenState extends State<AuthScreen> {
         _error = e.toString();
       });
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -79,42 +78,39 @@ class _AuthScreenState extends State<AuthScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 60),
-
-              // Logo
+              // Logo — image jaisa gradient chat bubble
               Center(
                 child: Container(
-                  width: 100,
-                  height: 100,
+                  width: 110,
+                  height: 110,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [AppColors.primary, AppColors.primaryDark],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(28),
+                    borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        color: AppColors.primary.withOpacity(0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
                       ),
                     ],
                   ),
                   child: const Icon(
                     Icons.chat_bubble,
                     color: Colors.white,
-                    size: 50,
+                    size: 55,
                   ),
                 ),
               ),
-
-              const SizedBox(height: 24),
-
+              const SizedBox(height: 28),
               const Center(
                 child: Text(
                   'Chatly',
                   style: TextStyle(
-                    fontSize: 34,
+                    fontSize: 36,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
@@ -125,63 +121,35 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Text(
                   'Simple. Fast. Connected.',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 15,
                     color: AppColors.textSecondary,
                   ),
                 ),
               ),
-
               const SizedBox(height: 48),
 
               if (!_isLogin) ...[
-                TextField(
+                _buildField(
                   controller: _nameController,
-                  decoration: InputDecoration(
-                    hintText: 'Naam',
-                    prefixIcon: const Icon(Icons.person_outline,
-                        color: AppColors.textSecondary),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
+                  hint: 'Naam',
+                  icon: Icons.person_outline,
                 ),
                 const SizedBox(height: 16),
               ],
 
-              TextField(
+              _buildField(
                 controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  hintText: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined,
-                      color: AppColors.textSecondary),
-                  filled: true,
-                  fillColor: AppColors.background,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+                hint: 'Email',
+                icon: Icons.email_outlined,
+                keyboard: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
 
-              TextField(
+              _buildField(
                 controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline,
-                      color: AppColors.textSecondary),
-                  filled: true,
-                  fillColor: AppColors.background,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+                hint: 'Password',
+                icon: Icons.lock_outline,
+                obscure: true,
               ),
 
               if (_error != null) ...[
@@ -218,9 +186,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
               TextButton(
                 onPressed: () {
                   setState(() {
@@ -241,6 +207,33 @@ class _AuthScreenState extends State<AuthScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool obscure = false,
+    TextInputType? keyboard,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboard,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon:
+            Icon(icon, color: AppColors.textSecondary),
+        filled: true,
+        fillColor: AppColors.background,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       ),
     );
   }
