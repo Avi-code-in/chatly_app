@@ -66,12 +66,14 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _pickFile() async {
     final result = await FilePicker.pickFiles(
       type: FileType.any,
-      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
+
     final file = result.files.first;
-    if (file.bytes == null) return;
-    final base64File = base64Encode(file.bytes!);
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) return;
+
+    final base64File = base64Encode(bytes);
     await _chatService.sendFileMessage(
         widget.chatId, file.name, base64File);
   }
