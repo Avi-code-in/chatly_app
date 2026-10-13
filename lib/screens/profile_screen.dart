@@ -15,38 +15,18 @@ class ProfileScreen extends StatelessWidget {
     final chatService = ChatService();
 
     return SafeArea(
-      child: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Profile',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<UserModel?>(
-              stream: chatService.getCurrentUser(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData || snapshot.data == null) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.primary),
-                  );
-                }
-                final user = snapshot.data!;
-                return _buildProfile(context, user, chatService);
-              },
-            ),
-          ),
-        ],
+      child: StreamBuilder<UserModel?>(
+        stream: chatService.getCurrentUser(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || snapshot.data == null) {
+            return const Center(
+              child:
+                  CircularProgressIndicator(color: AppColors.primary),
+            );
+          }
+          final user = snapshot.data!;
+          return _buildProfile(context, user, chatService);
+        },
       ),
     );
   }
@@ -57,121 +37,220 @@ class ProfileScreen extends StatelessWidget {
         user.photoUrl!.startsWith('data:image');
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.zero,
       children: [
-        const SizedBox(height: 10),
-        Center(
-          child: Stack(
+        // Header with gradient
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.primary.withOpacity(0.1),
+                AppColors.primary.withOpacity(0.05),
+              ],
+            ),
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(40),
+              bottomRight: Radius.circular(40),
+            ),
+          ),
+          child: Column(
             children: [
-              CircleAvatar(
-                radius: 60,
-                backgroundColor: AppColors.primary.withOpacity(0.15),
-                backgroundImage: hasImage
-                    ? MemoryImage(_decodeBase64(user.photoUrl!))
-                    : null,
-                child: !hasImage
-                    ? Text(
-                        user.name.isNotEmpty
-                            ? user.name[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 42,
-                        ),
-                      )
-                    : null,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox(),
+                  IconButton(
+                    icon: const Icon(Icons.settings,
+                        color: AppColors.textPrimary),
+                    onPressed: () {},
+                  ),
+                ],
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () => _pickImage(context, service),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      color: Colors.white,
-                      size: 18,
+              const SizedBox(height: 8),
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 55,
+                    backgroundColor: AppColors.primary.withOpacity(0.15),
+                    backgroundImage: hasImage
+                        ? MemoryImage(_decodeBase64(user.photoUrl!))
+                        : null,
+                    child: !hasImage
+                        ? Text(
+                            user.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 42,
+                            ),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: () => _pickImage(context, service),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                user.name,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                user.phone,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.online.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.online,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Online',
+                      style: TextStyle(
+                        color: AppColors.online,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 20),
-        Center(
-          child: Text(
-            user.name,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Center(
-          child: Text(
-            user.email,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-        const SizedBox(height: 40),
         _menuItem(
           Icons.person_outline,
-          'Edit Name',
+          'Account',
+          'Privacy, security, change number',
           () => _editName(context, service, user.name),
         ),
-        _menuItem(Icons.settings_outlined, 'Settings', () {
-          _showInfoDialog(context, 'Settings', 'Settings coming soon!');
-        }),
-        _menuItem(Icons.help_outline, 'Help & Support', () {
-          _showInfoDialog(context, 'Help & Support',
-              'Any issues? Email us at avirup@chatly.com');
-        }),
-        _menuItem(Icons.info_outline, 'About', () {
-          _showInfoDialog(context, 'About Chatly',
-              'Chatly v1.0.0\nSimple. Fast. Connected.\n\nMade with ❤️ in India');
-        }),
-        const SizedBox(height: 12),
         _menuItem(
-          Icons.logout,
-          'Log Out',
-          () => _logout(context, service),
-          color: Colors.red,
+          Icons.notifications_outlined,
+          'Notifications',
+          'Message, group & call tones',
+          () {},
         ),
+        _menuItem(
+          Icons.storage_outlined,
+          'Storage & Data',
+          'Network usage, auto-download',
+          () {},
+        ),
+        _menuItem(
+          Icons.help_outline,
+          'Help & Support',
+          'FAQ, contact us',
+          () {},
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: GestureDetector(
+            onTap: () => _logout(context, service),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.logout, color: Colors.red, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Log Out',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
       ],
     );
   }
 
-  Widget _menuItem(IconData icon, String title, VoidCallback onTap,
-      {Color? color}) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(14),
-      ),
+  Widget _menuItem(IconData icon, String title, String subtitle,
+      VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: ListTile(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
-        leading: Icon(icon, color: color ?? AppColors.textPrimary),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 22),
+        ),
         title: Text(
           title,
-          style: TextStyle(
-            color: color ?? AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
             fontSize: 15,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
           ),
         ),
         trailing: const Icon(
@@ -180,23 +259,6 @@ class ProfileScreen extends StatelessWidget {
           color: AppColors.textSecondary,
         ),
         onTap: onTap,
-      ),
-    );
-  }
-
-  void _showInfoDialog(
-      BuildContext context, String title, String content) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
   }
@@ -211,11 +273,9 @@ class ProfileScreen extends StatelessWidget {
       imageQuality: 70,
     );
     if (picked == null) return;
-
     final bytes = await picked.readAsBytes();
     final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
     await service.updateProfilePicture(base64Image);
-
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile picture updated!')),

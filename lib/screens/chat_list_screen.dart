@@ -31,17 +31,32 @@ class _ChatListScreenState extends State<ChatListScreen> {
       backgroundColor: AppColors.white,
       body: IndexedStack(index: _currentIndex, children: pages),
       floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-              backgroundColor: AppColors.primary,
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const NewChatScreen()),
-                );
-              },
-              child:
-                  const Icon(Icons.add, color: Colors.white, size: 28),
+          ? Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.primaryDark],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.edit, color: Colors.white, size: 24),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const NewChatScreen()),
+                  );
+                },
+              ),
             )
           : null,
       bottomNavigationBar: Container(
@@ -72,7 +87,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.people),
-              label: 'Contacts',
+              label: 'Status',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person),
@@ -101,7 +116,7 @@ class _ChatsTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Chats',
+                  'Chatly',
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.bold,
@@ -131,6 +146,31 @@ class _ChatsTab extends StatelessWidget {
               ],
             ),
           ),
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search chats...',
+                  hintStyle: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(Icons.search,
+                      color: AppColors.textSecondary),
+                  border: InputBorder.none,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: chatService.getChats(),
@@ -146,7 +186,6 @@ class _ChatsTab extends StatelessWidget {
                   return _emptyState();
                 }
 
-                // Filter: only chats with lastMessage
                 final chats = snapshot.data!
                     .where((chat) =>
                         (chat['lastMessage'] ?? '').toString().isNotEmpty)
@@ -169,8 +208,7 @@ class _ChatsTab extends StatelessWidget {
                           return const SizedBox.shrink();
                         }
                         final user = userSnapshot.data!;
-                        return _chatTile(
-                            context, chatId, chatData, user, chatService);
+                        return _chatTile(context, chatId, chatData, user);
                       },
                     );
                   },
@@ -204,7 +242,7 @@ class _ChatsTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tap + to start a new chat',
+            'Tap the edit button to start a new chat',
             style: TextStyle(
               fontSize: 14,
               color: AppColors.textSecondary,
@@ -216,11 +254,10 @@ class _ChatsTab extends StatelessWidget {
   }
 
   Widget _chatTile(BuildContext context, String chatId,
-      Map<String, dynamic> chatData, UserModel user, ChatService service) {
+      Map<String, dynamic> chatData, UserModel user) {
     final lastMessage = chatData['lastMessage'] ?? '';
     final lastSender = chatData['lastMessageSender'] ?? '';
-    final isMe = lastSender == service.currentUserId;
-    final timeStr = _formatTime(chatData['lastMessageTime']);
+    final isMe = lastSender == ChatService().currentUserId;
 
     return ListTile(
       contentPadding:
@@ -239,8 +276,8 @@ class _ChatsTab extends StatelessWidget {
             ),
           ),
           Text(
-            timeStr,
-            style: const TextStyle(
+            _formatTime(chatData['lastMessageTime']),
+            style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -318,7 +355,7 @@ class _ChatsTab extends StatelessWidget {
               width: radius * 0.5,
               height: radius * 0.5,
               decoration: BoxDecoration(
-                color: Colors.green,
+                color: AppColors.online,
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.white, width: 2),
               ),
@@ -347,7 +384,7 @@ class _ChatsTab extends StatelessWidget {
       } else if (diff.inMinutes > 0) {
         return '${diff.inMinutes}m';
       } else {
-        return 'abhi';
+        return 'now';
       }
     } catch (_) {
       return '';

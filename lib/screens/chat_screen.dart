@@ -64,15 +64,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.any,
-    );
+    final result = await FilePicker.pickFiles(type: FileType.any);
     if (result == null || result.isEmpty) return;
-
     final file = result.first;
     final bytes = await file.readAsBytes();
     if (bytes.isEmpty) return;
-
     final base64File = base64Encode(bytes);
     await _chatService.sendFileMessage(
         widget.chatId, file.name, base64File);
@@ -125,14 +121,16 @@ class _ChatScreenState extends State<ChatScreen> {
               if (isMe)
                 ListTile(
                   leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  title:
+                      const Text('Delete', style: TextStyle(color: Colors.red)),
                   onTap: () async {
                     Navigator.pop(context);
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text('Delete message?'),
-                        content: const Text('This message will be deleted for everyone.'),
+                        content:
+                            const Text('This message will be deleted for everyone.'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context, false),
@@ -140,7 +138,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                            child: const Text('Delete',
+                                style: TextStyle(color: Colors.red)),
                           ),
                         ],
                       ),
@@ -158,38 +157,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _showProfilePicture(String? photoUrl, String name) {
-    if (photoUrl == null || !photoUrl.startsWith('data:image')) return;
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.memory(
-                _decodeBase64(photoUrl),
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final hasImage = widget.otherUserPhoto != null &&
@@ -202,8 +169,37 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Row(
           children: [
             GestureDetector(
-              onTap: () => _showProfilePicture(
-                  widget.otherUserPhoto, widget.otherUserName),
+              onTap: () {
+                if (hasImage) {
+                  showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      backgroundColor: Colors.transparent,
+                      insetPadding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.memory(
+                              _decodeBase64(widget.otherUserPhoto!),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            widget.otherUserName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+              },
               child: CircleAvatar(
                 radius: 20,
                 backgroundColor: AppColors.primary.withOpacity(0.15),
@@ -238,7 +234,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const Text(
                   'Online',
-                  style: TextStyle(color: Colors.green, fontSize: 12),
+                  style: TextStyle(color: AppColors.online, fontSize: 12),
                 ),
               ],
             ),
@@ -246,7 +242,11 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.call, color: AppColors.textPrimary),
+            icon: const Icon(Icons.call, color: AppColors.primary),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam, color: AppColors.primary),
             onPressed: () {},
           ),
           IconButton(
@@ -339,15 +339,9 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(
-                      _showEmoji
-                          ? Icons.keyboard
-                          : Icons.emoji_emotions_outlined,
-                      color: AppColors.textSecondary,
-                    ),
-                    onPressed: () {
-                      setState(() => _showEmoji = !_showEmoji);
-                    },
+                    icon: const Icon(Icons.add_circle,
+                        color: AppColors.primary, size: 28),
+                    onPressed: _pickFile,
                   ),
                   Expanded(
                     child: TextField(
@@ -378,30 +372,43 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   IconButton(
+                    icon: Icon(
+                      _showEmoji
+                          ? Icons.keyboard
+                          : Icons.emoji_emotions_outlined,
+                      color: AppColors.textSecondary,
+                    ),
+                    onPressed: () {
+                      setState(() => _showEmoji = !_showEmoji);
+                    },
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.attach_file,
                         color: AppColors.textSecondary),
                     onPressed: _pickFile,
                   ),
-                  if (_messageController.text.isEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.camera_alt,
-                          color: AppColors.textSecondary),
-                      onPressed: _pickImage,
-                    )
-                  else
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primary, AppColors.primaryDark],
                       ),
-                      child: IconButton(
-                        icon: const Icon(Icons.send_rounded,
-                            color: Colors.white, size: 20),
-                        onPressed: _sendMessage,
-                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send_rounded,
+                          color: Colors.white, size: 20),
+                      onPressed: _sendMessage,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -459,33 +466,25 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               )
             else if (msg.type == 'file' && msg.fileName != null)
-              InkWell(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Opening ${msg.fileName}...')),
-                  );
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.insert_drive_file,
-                      color: isMe ? Colors.white : AppColors.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        msg.fileName!,
-                        style: TextStyle(
-                          color:
-                              isMe ? Colors.white : AppColors.textPrimary,
-                          fontSize: 14,
-                          decoration: TextDecoration.underline,
-                        ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.insert_drive_file,
+                    color: isMe ? Colors.white : AppColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      msg.fileName!,
+                      style: TextStyle(
+                        color:
+                            isMe ? Colors.white : AppColors.textPrimary,
+                        fontSize: 14,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               )
             else
               Text(
