@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import '../models/user_model.dart';
 import '../models/message_model.dart';
 
@@ -11,7 +12,7 @@ class ChatService {
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
-  Future<void> createUserIfNotExists(String name) async {
+  Future<void> createUserIfNotExistsWithPhone(String name, String phone) async {
     final uid = currentUserId;
     if (uid.isEmpty) return;
 
@@ -20,7 +21,8 @@ class ChatService {
       await _firestore.collection('users').doc(uid).set({
         'uid': uid,
         'name': name,
-        'email': _auth.currentUser?.email ?? '',
+        'phone': phone,
+        'email': '',
         'photoUrl': null,
         'isOnline': true,
         'lastSeen': DateTime.now().toIso8601String(),
@@ -54,6 +56,62 @@ class ChatService {
     }
   }
 
+  // 🔥 Sirf contacts mein wale users dikhao
+  Future<List<UserModel>> getContactsOnly() async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return [];
+
+    try {
+      // Permission maango
+      final permission = await FlutterContacts.requestPermission();
+      if (!permission) return [];
+
+      // Phone ke contacts uthao
+      final contacts = await FlutterContacts.getContacts(
+        withProperties: true,
+        withPhoto: false,
+      );
+
+      // Saare phone numbers nikalo
+      final phoneNumbers = <String>[];
+      for (var c in contacts) {
+        for (var p in c.phones) {
+          final cleaned = p.number.replaceAll(RegExp(r'[^\d]'), '');
+          if (cleaned.length >= 10) {
+            phoneNumbers.add(cleaned.substring(cleaned.length - 10));
+          }
+        }
+      }
+
+      if (phoneNumbers.isEmpty) return [];
+
+      // Firestore se matching users dhundho
+      final usersSnapshot =
+          await _firestore.collection('users').get();
+
+      final matchedUsers = <UserModel>[];
+      for (var doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final userPhone = (data['phone'] ?? '').toString();
+        final cleaned = userPhone.replaceAll(RegExp(r'[^\d]'), '');
+        final last10 = cleaned.length >= 10
+            ? cleaned.substring(cleaned.length - 10)
+            : cleaned;
+
+        if (last10.isNotEmpty &&
+            phoneNumbers.contains(last10) &&
+            data['uid'] != uid) {
+          matchedUsers.add(UserModel.fromMap(data));
+        }
+      }
+
+      return matchedUsers;
+    } catch (e) {
+      debugPrint('Contacts error: $e');
+      return [];
+    }
+  }
+
   Future<void> updateProfilePicture(String base64Image) async {
     final uid = currentUserId;
     if (uid.isEmpty) return;
@@ -75,16 +133,6 @@ class ChatService {
       if (!doc.exists) return null;
       return UserModel.fromMap(doc.data()!);
     });
-  }
-
-  Stream<List<UserModel>> getUsers() {
-    return _firestore
-        .collection('users')
-        .where('uid', isNotEqualTo: currentUserId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => UserModel.fromMap(doc.data()))
-            .toList());
   }
 
   Future<UserModel?> getUserById(String uid) async {
@@ -133,7 +181,6 @@ class ChatService {
     });
   }
 
-  // Text message
   Future<void> sendMessage(String chatId, String text) async {
     if (text.trim().isEmpty) return;
     await _sendMessageData(chatId, {
@@ -145,7 +192,6 @@ class ChatService {
     }, text.trim());
   }
 
-  // Image message (base64)
   Future<void> sendImageMessage(String chatId, String base64Image) async {
     await _sendMessageData(chatId, {
       'senderId': currentUserId,
@@ -157,7 +203,6 @@ class ChatService {
     }, '📷 Photo');
   }
 
-  // File message
   Future<void> sendFileMessage(
       String chatId, String fileName, String base64File) async {
     await _sendMessageData(chatId, {
@@ -211,6 +256,15 @@ class ChatService {
     }
   }
 
+  Future<void> deleteMessage(String chatId, String messageId) async {
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(messageId)
+        .delete();
+  }
+
   Future<UserModel?> getOtherUser(String chatId) async {
     final doc = await _firestore.collection('chats').doc(chatId).get();
     if (!doc.exists) return null;
@@ -221,6 +275,27 @@ class ChatService {
     );
     if (otherId.isEmpty) return null;
     return getUserById(otherId);
+  }
+
+  Stream<UserModel?> getUserStream(String chatId) {
+    return _firestore
+        .collection('chats')
+        .doc(chatId)
+        .snapshots()
+        .asyncMap((chatDoc) async {
+      if (!chatDoc.exists) return null;
+      final participants =
+          List<String>.from(chatDoc.data()?['participants'] ?? []);
+      final otherId = participants.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => '',
+      );
+      if (otherId.isEmpty) return null;
+      final userDoc =
+          await _firestore.collection('users').doc(otherId).get();
+      if (!userDoc.exists) return null;
+      return UserModel.fromMap(userDoc.data()!);
+    });
   }
 
   Future<void> updateOnlineStatus(bool isOnline) async {

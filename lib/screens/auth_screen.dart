@@ -12,39 +12,92 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _otpController = TextEditingController();
   final _nameController = TextEditingController();
-  bool _isLogin = true;
+  bool _codeSent = false;
   bool _loading = false;
   String? _error;
+  String? _verificationId;
 
   final _auth = FirebaseAuth.instance;
   final _chatService = ChatService();
 
-  Future<void> _submit() async {
+  Future<void> _sendOtp() async {
+    final phone = _phoneController.text.trim();
+    if (phone.length != 10) {
+      setState(() => _error = 'Enter valid 10-digit phone number');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    await _auth.verifyPhoneNumber(
+      phoneNumber: '+91$phone',
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await _auth.signInWithCredential(credential);
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const ChatListScreen()),
+          );
+        }
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        setState(() {
+          _error = e.message ?? 'Verification failed';
+          _loading = false;
+        });
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        setState(() {
+          _verificationId = verificationId;
+          _codeSent = true;
+          _loading = false;
+        });
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        _verificationId = verificationId;
+      },
+    );
+  }
+
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
+      setState(() => _error = 'Enter valid 6-digit OTP');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      if (_isLogin) {
-        await _auth.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        await _chatService.updateOnlineStatus(true);
-      } else {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: otp,
+      );
+      final userCredential = await _auth.signInWithCredential(credential);
+
+      // Check if new user
+      final uid = userCredential.user!.uid;
+      final existingUser = await _chatService.getUserById(uid);
+
+      if (existingUser == null) {
+        // New user - need name
         if (_nameController.text.trim().isEmpty) {
-          throw Exception('Please enter your name');
+          setState(() {
+            _error = 'Please enter your name';
+            _loading = false;
+          });
+          return;
         }
-        await _auth.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        await _chatService.createUserIfNotExists(
+        await _chatService.createUserIfNotExistsWithPhone(
           _nameController.text.trim(),
+          '+91${_phoneController.text.trim()}',
         );
       }
 
@@ -54,16 +107,11 @@ class _AuthScreenState extends State<AuthScreen> {
           MaterialPageRoute(builder: (_) => const ChatListScreen()),
         );
       }
-    } on FirebaseAuthException catch (e) {
-      setState(() {
-        _error = e.message ?? 'Kuch galat ho gaya';
-      });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = 'Invalid OTP. Please try again.';
+        _loading = false;
       });
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -78,7 +126,6 @@ class _AuthScreenState extends State<AuthScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 60),
-              // Logo — image jaisa gradient chat bubble
               Center(
                 child: Container(
                   width: 110,
@@ -128,29 +175,125 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
               const SizedBox(height: 48),
 
-              if (!_isLogin) ...[
-                _buildField(
-                  controller: _nameController,
-                  hint: 'Name',
-                  icon: Icons.person_outline,
+              if (!_codeSent) ...[
+                TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  decoration: InputDecoration(
+                    hintText: 'Phone number',
+                    prefixIcon: const Icon(Icons.phone,
+                        color: AppColors.textSecondary),
+                    prefixText: '+91 ',
+                    filled: true,
+                    fillColor: AppColors.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    counterText: '',
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 18),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _sendOtp,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _loading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Send OTP',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'OTP sent to +91 ${_phoneController.text}',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 16),
+                TextField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: InputDecoration(
+                    hintText: 'Enter 6-digit OTP',
+                    prefixIcon: const Icon(Icons.lock_outline,
+                        color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    counterText: '',
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 18),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    hintText: 'Your name',
+                    prefixIcon: const Icon(Icons.person_outline,
+                        color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 18),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _verifyOtp,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _loading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Verify & Login',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => setState(() {
+                    _codeSent = false;
+                    _otpController.clear();
+                  }),
+                  child: const Text('Change phone number'),
+                ),
               ],
-
-              _buildField(
-                controller: _emailController,
-                hint: 'Email',
-                icon: Icons.email_outlined,
-                keyboard: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-
-              _buildField(
-                controller: _passwordController,
-                hint: 'Password',
-                icon: Icons.lock_outline,
-                obscure: true,
-              ),
 
               if (_error != null) ...[
                 const SizedBox(height: 16),
@@ -160,80 +303,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   textAlign: TextAlign.center,
                 ),
               ],
-
-              const SizedBox(height: 28),
-
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: _loading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          _isLogin ? 'Login' : 'Create Account',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _isLogin = !_isLogin;
-                    _error = null;
-                  });
-                },
-                child: Text(
-                  _isLogin
-                      ? 'Create new account'
-                      : 'Already have an account? Login',
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool obscure = false,
-    TextInputType? keyboard,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: keyboard,
-      decoration: InputDecoration(
-        hintText: hint,
-        prefixIcon:
-            Icon(icon, color: AppColors.textSecondary),
-        filled: true,
-        fillColor: AppColors.background,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       ),
     );
   }

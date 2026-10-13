@@ -2,6 +2,7 @@ class UserModel {
   final String uid;
   final String name;
   final String email;
+  final String phone;
   final String? photoUrl;
   final bool isOnline;
   final DateTime? lastSeen;
@@ -9,7 +10,8 @@ class UserModel {
   UserModel({
     required this.uid,
     required this.name,
-    required this.email,
+    this.email = '',
+    this.phone = '',
     this.photoUrl,
     this.isOnline = false,
     this.lastSeen,
@@ -20,6 +22,7 @@ class UserModel {
       'uid': uid,
       'name': name,
       'email': email,
+      'phone': phone,
       'photoUrl': photoUrl,
       'isOnline': isOnline,
       'lastSeen': lastSeen?.toIso8601String(),
@@ -31,6 +34,7 @@ class UserModel {
       uid: map['uid'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
+      phone: map['phone'] ?? '',
       photoUrl: map['photoUrl'],
       isOnline: map['isOnline'] ?? false,
       lastSeen: map['lastSeen'] != null

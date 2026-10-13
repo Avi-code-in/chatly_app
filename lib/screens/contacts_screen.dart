@@ -6,12 +6,37 @@ import '../models/user_model.dart';
 import '../theme.dart';
 import 'chat_screen.dart';
 
-class ContactsScreen extends StatelessWidget {
+class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
 
   @override
+  State<ContactsScreen> createState() => _ContactsScreenState();
+}
+
+class _ContactsScreenState extends State<ContactsScreen> {
+  List<UserModel> _contacts = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContacts();
+  }
+
+  Future<void> _loadContacts() async {
+    final service = ChatService();
+    final contacts = await service.getContactsOnly();
+    if (mounted) {
+      setState(() {
+        _contacts = contacts;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final chatService = ChatService();
+    final service = ChatService();
 
     return SafeArea(
       child: Column(
@@ -30,96 +55,97 @@ class ContactsScreen extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.search,
+                  icon: const Icon(Icons.refresh,
                       color: AppColors.textPrimary),
-                  onPressed: () {},
+                  onPressed: () {
+                    setState(() => _loading = true);
+                    _loadContacts();
+                  },
                 ),
               ],
             ),
           ),
           Expanded(
-            child: StreamBuilder<List<UserModel>>(
-              stream: chatService.getUsers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
+            child: _loading
+                ? const Center(
                     child: CircularProgressIndicator(
-                        color: AppColors.primary),
-                  );
-                }
-
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          size: 80,
-                          color: AppColors.textSecondary.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'No contacts yet',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final users = snapshot.data!;
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final user = users[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 6),
-                      leading: _avatar(user, 26),
-                      title: Text(
-                        user.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        user.isOnline ? 'Online' : 'Offline',
-                        style: TextStyle(
-                          color: user.isOnline
-                              ? Colors.green
-                              : AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                      ),
-                      onTap: () async {
-                        final chatId =
-                            await chatService.createOrGetChatRoom(user.uid);
-                        if (context.mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                chatId: chatId,
-                                otherUserName: user.name,
-                                otherUserPhoto: user.photoUrl,
+                        color: AppColors.primary))
+                : _contacts.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.people_outline,
+                              size: 80,
+                              color: AppColors.textSecondary
+                                  .withOpacity(0.5),
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'No contacts yet',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'App users with your contacts will appear here',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: _contacts.length,
+                        itemBuilder: (context, index) {
+                          final user = _contacts[index];
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 6),
+                            leading: _avatar(user, 26),
+                            title: Text(
+                              user.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            subtitle: Text(
+                              user.isOnline ? 'Online' : 'Offline',
+                              style: TextStyle(
+                                color: user.isOnline
+                                    ? Colors.green
+                                    : AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            onTap: () async {
+                              final chatId = await service
+                                  .createOrGetChatRoom(user.uid);
+                              if (context.mounted) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ChatScreen(
+                                      chatId: chatId,
+                                      otherUserName: user.name,
+                                      otherUserPhoto: user.photoUrl,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
                           );
-                        }
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+                        },
+                      ),
           ),
         ],
       ),

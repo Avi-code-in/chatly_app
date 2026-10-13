@@ -25,6 +25,10 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Print SHA-1
+        run: |
+          keytool -list -v -keystore $HOME/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android || true
+
       - name: Build APK
         run: flutter build apk --release --no-tree-shake-icons
 

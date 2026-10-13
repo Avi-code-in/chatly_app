@@ -78,6 +78,118 @@ class _ChatScreenState extends State<ChatScreen> {
         widget.chatId, file.name, base64File);
   }
 
+  void _showMessageOptions(MessageModel msg, bool isMe) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (msg.type == 'text')
+                ListTile(
+                  leading: const Icon(Icons.copy, color: AppColors.textPrimary),
+                  title: const Text('Copy'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Clipboard.setData(ClipboardData(text: msg.text));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Message copied')),
+                    );
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.share, color: AppColors.textPrimary),
+                title: const Text('Share'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Share coming soon')),
+                  );
+                },
+              ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Delete message?'),
+                        content: const Text('This message will be deleted for everyone.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await _chatService.deleteMessage(widget.chatId, msg.id);
+                    }
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showProfilePicture(String? photoUrl, String name) {
+    if (photoUrl == null || !photoUrl.startsWith('data:image')) return;
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.memory(
+                _decodeBase64(photoUrl),
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasImage = widget.otherUserPhoto != null &&
@@ -89,24 +201,28 @@ class _ChatScreenState extends State<ChatScreen> {
         titleSpacing: 0,
         title: Row(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: AppColors.primary.withOpacity(0.15),
-              backgroundImage: hasImage
-                  ? MemoryImage(_decodeBase64(widget.otherUserPhoto!))
-                  : null,
-              child: !hasImage
-                  ? Text(
-                      widget.otherUserName.isNotEmpty
-                          ? widget.otherUserName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    )
-                  : null,
+            GestureDetector(
+              onTap: () => _showProfilePicture(
+                  widget.otherUserPhoto, widget.otherUserName),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: AppColors.primary.withOpacity(0.15),
+                backgroundImage: hasImage
+                    ? MemoryImage(_decodeBase64(widget.otherUserPhoto!))
+                    : null,
+                child: !hasImage
+                    ? Text(
+                        widget.otherUserName.isNotEmpty
+                            ? widget.otherUserName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(width: 12),
             Column(
@@ -183,7 +299,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     final msg = messages[index];
                     final isMe =
                         msg.senderId == _chatService.currentUserId;
-                    return _buildMessageBubble(msg, isMe);
+                    return GestureDetector(
+                      onLongPress: () => _showMessageOptions(msg, isMe),
+                      child: _buildMessageBubble(msg, isMe),
+                    );
                   },
                 );
               },
@@ -317,34 +436,56 @@ class _ChatScreenState extends State<ChatScreen> {
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             if (msg.type == 'image' && msg.imageData != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(
-                  _decodeBase64(msg.imageData!),
-                  width: 200,
-                  fit: BoxFit.cover,
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      backgroundColor: Colors.transparent,
+                      insetPadding: const EdgeInsets.all(10),
+                      child: InteractiveViewer(
+                        child: Image.memory(_decodeBase64(msg.imageData!)),
+                      ),
+                    ),
+                  );
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    _decodeBase64(msg.imageData!),
+                    width: 200,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               )
             else if (msg.type == 'file' && msg.fileName != null)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.insert_drive_file,
-                    color: isMe ? Colors.white : AppColors.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      msg.fileName!,
-                      style: TextStyle(
-                        color:
-                            isMe ? Colors.white : AppColors.textPrimary,
-                        fontSize: 14,
+              InkWell(
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Opening ${msg.fileName}...')),
+                  );
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.insert_drive_file,
+                      color: isMe ? Colors.white : AppColors.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        msg.fileName!,
+                        style: TextStyle(
+                          color:
+                              isMe ? Colors.white : AppColors.textPrimary,
+                          fontSize: 14,
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               )
             else
               Text(
