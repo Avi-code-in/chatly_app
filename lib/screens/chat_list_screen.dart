@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/chat_service.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
@@ -19,7 +18,6 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   int _currentIndex = 0;
-  final _chatService = ChatService();
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +113,13 @@ class _ChatsTab extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.search,
                           color: AppColors.textPrimary),
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const NewChatScreen()),
+                        );
+                      },
                     ),
                     IconButton(
                       icon: const Icon(Icons.more_vert,
@@ -128,7 +132,7 @@ class _ChatsTab extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: chatService.getChats(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -138,16 +142,15 @@ class _ChatsTab extends StatelessWidget {
                   );
                 }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return _emptyState();
                 }
 
-                final chats = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  return (data['lastMessage'] ?? '')
-                      .toString()
-                      .isNotEmpty;
-                }).toList();
+                // Filter: only chats with lastMessage
+                final chats = snapshot.data!
+                    .where((chat) =>
+                        (chat['lastMessage'] ?? '').toString().isNotEmpty)
+                    .toList();
 
                 if (chats.isEmpty) return _emptyState();
 
@@ -155,10 +158,8 @@ class _ChatsTab extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: chats.length,
                   itemBuilder: (context, index) {
-                    final chatDoc = chats[index];
-                    final chatData =
-                        chatDoc.data() as Map<String, dynamic>;
-                    final chatId = chatDoc.id;
+                    final chatData = chats[index];
+                    final chatId = chatData['chatId'] as String;
 
                     return FutureBuilder<UserModel?>(
                       future: chatService.getOtherUser(chatId),
@@ -169,7 +170,7 @@ class _ChatsTab extends StatelessWidget {
                         }
                         final user = userSnapshot.data!;
                         return _chatTile(
-                            context, chatId, chatData, user);
+                            context, chatId, chatData, user, chatService);
                       },
                     );
                   },
@@ -215,33 +216,59 @@ class _ChatsTab extends StatelessWidget {
   }
 
   Widget _chatTile(BuildContext context, String chatId,
-      Map<String, dynamic> chatData, UserModel user) {
+      Map<String, dynamic> chatData, UserModel user, ChatService service) {
+    final lastMessage = chatData['lastMessage'] ?? '';
+    final lastSender = chatData['lastMessageSender'] ?? '';
+    final isMe = lastSender == service.currentUserId;
+    final timeStr = _formatTime(chatData['lastMessageTime']);
+
     return ListTile(
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       leading: _avatar(user, 28),
-      title: Text(
-        user.name,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 16,
-          color: AppColors.textPrimary,
-        ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              user.name,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          Text(
+            timeStr,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
-      subtitle: Text(
-        chatData['lastMessage'] ?? '',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 14,
-        ),
-      ),
-      trailing: Text(
-        _formatTime(chatData['lastMessageTime']),
-        style: const TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 12,
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Row(
+          children: [
+            if (isMe)
+              const Padding(
+                padding: EdgeInsets.only(right: 4),
+                child: Icon(Icons.done_all,
+                    size: 16, color: AppColors.primary),
+              ),
+            Expanded(
+              child: Text(
+                lastMessage,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       onTap: () {
@@ -307,7 +334,7 @@ class _ChatsTab extends StatelessWidget {
   }
 
   String _formatTime(String? timestamp) {
-    if (timestamp == null) return '';
+    if (timestamp == null || timestamp.isEmpty) return '';
     try {
       final dt = DateTime.parse(timestamp);
       final now = DateTime.now();

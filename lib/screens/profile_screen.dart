@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/chat_service.dart';
 import '../models/user_model.dart';
@@ -132,9 +131,17 @@ class ProfileScreen extends StatelessWidget {
           'Edit Name',
           () => _editName(context, service, user.name),
         ),
-        _menuItem(Icons.settings_outlined, 'Settings', () {}),
-        _menuItem(Icons.help_outline, 'Help & Support', () {}),
-        _menuItem(Icons.info_outline, 'About', () {}),
+        _menuItem(Icons.settings_outlined, 'Settings', () {
+          _showInfoDialog(context, 'Settings', 'Settings jald aa rahi hai!');
+        }),
+        _menuItem(Icons.help_outline, 'Help & Support', () {
+          _showInfoDialog(context, 'Help & Support',
+              'Koi problem? avirup@chatly.com pe email karo.');
+        }),
+        _menuItem(Icons.info_outline, 'About', () {
+          _showInfoDialog(context, 'About Chatly',
+              'Chatly v1.0.0\nSimple. Fast. Connected.\n\nMade with ❤️ in India');
+        }),
         const SizedBox(height: 12),
         _menuItem(
           Icons.logout,
@@ -173,6 +180,23 @@ class ProfileScreen extends StatelessWidget {
           color: AppColors.textSecondary,
         ),
         onTap: onTap,
+      ),
+    );
+  }
+
+  void _showInfoDialog(
+      BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
