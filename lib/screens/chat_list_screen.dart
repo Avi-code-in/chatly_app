@@ -195,7 +195,7 @@ class _ChatsTab extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Abhi koi chat nahi hai',
+            'No chats yet',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -204,7 +204,7 @@ class _ChatsTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Neeche + dabao aur naya chat shuru karo',
+            'Tap + to start a new chat',
             style: TextStyle(
               fontSize: 14,
               color: AppColors.textSecondary,

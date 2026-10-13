@@ -37,7 +37,7 @@ class _AuthScreenState extends State<AuthScreen> {
         await _chatService.updateOnlineStatus(true);
       } else {
         if (_nameController.text.trim().isEmpty) {
-          throw Exception('Naam daalo');
+          throw Exception('Please enter your name');
         }
         await _auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
@@ -131,7 +131,7 @@ class _AuthScreenState extends State<AuthScreen> {
               if (!_isLogin) ...[
                 _buildField(
                   controller: _nameController,
-                  hint: 'Naam',
+                  hint: 'Name',
                   icon: Icons.person_outline,
                 ),
                 const SizedBox(height: 16),
@@ -178,7 +178,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: _loading
                       ? const CircularProgressIndicator(color: Colors.white)
                       : Text(
-                          _isLogin ? 'Login' : 'Account Banao',
+                          _isLogin ? 'Login' : 'Create Account',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -196,8 +196,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 },
                 child: Text(
                   _isLogin
-                      ? 'Naya account banao'
-                      : 'Pehle se account hai? Login karo',
+                      ? 'Create new account'
+                      : 'Already have an account? Login',
                   style: const TextStyle(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w500,

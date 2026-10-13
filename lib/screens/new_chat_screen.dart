@@ -72,7 +72,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return const Center(
                     child: Text(
-                      'Abhi koi user registered nahi hai',
+                      'No users registered yet',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 15,
@@ -89,7 +89,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
                 if (users.isEmpty) {
                   return const Center(
                     child: Text(
-                      'Koi contact nahi mila',
+                      'No contacts found',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 15,

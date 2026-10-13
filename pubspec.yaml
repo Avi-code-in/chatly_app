@@ -12,7 +12,11 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.4
-  image_picker: ^1.1.2
+  image_picker: ^1.2.4
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^22.3.2
+  emoji_picker_flutter: ^4.5.4
+  file_picker: ^13.1.0
 
 dev_dependencies:
   flutter_test:

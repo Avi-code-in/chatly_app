@@ -132,11 +132,11 @@ class ProfileScreen extends StatelessWidget {
           () => _editName(context, service, user.name),
         ),
         _menuItem(Icons.settings_outlined, 'Settings', () {
-          _showInfoDialog(context, 'Settings', 'Settings jald aa rahi hai!');
+          _showInfoDialog(context, 'Settings', 'Settings coming soon!');
         }),
         _menuItem(Icons.help_outline, 'Help & Support', () {
           _showInfoDialog(context, 'Help & Support',
-              'Koi problem? avirup@chatly.com pe email karo.');
+              'Any issues? Email us at avirup@chatly.com');
         }),
         _menuItem(Icons.info_outline, 'About', () {
           _showInfoDialog(context, 'About Chatly',
@@ -232,7 +232,7 @@ class ProfileScreen extends StatelessWidget {
         title: const Text('Edit Name'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: 'Naya naam'),
+          decoration: const InputDecoration(hintText: 'New name'),
         ),
         actions: [
           TextButton(
@@ -257,7 +257,7 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Log Out?'),
-        content: const Text('Kya tum logout karna chahte ho?'),
+        content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

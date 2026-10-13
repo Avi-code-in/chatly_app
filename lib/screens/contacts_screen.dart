@@ -60,7 +60,7 @@ class ContactsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Abhi koi contact nahi hai',
+                          'No contacts yet',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
