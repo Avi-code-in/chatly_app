@@ -67,9 +67,9 @@ class _ChatScreenState extends State<ChatScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.any,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (result == null || result.isEmpty) return;
 
-    final file = result.files.first;
+    final file = result.first;
     final bytes = await file.readAsBytes();
     if (bytes.isEmpty) return;
 
