@@ -31,32 +31,30 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   const details = NotificationDetails(android: androidDetails);
 
   await flutterLocalNotificationsPlugin.show(
-    notification.hashCode,
-    notification.title,
-    notification.body,
-    details,
+    id: notification.hashCode,
+    title: notification.title,
+    body: notification.body,
+    notificationDetails: details,
   );
 }
 
 Future<void> _setupFcm() async {
-  // Local notifications init
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
   const initSettings = InitializationSettings(android: androidInit);
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: initSettings,
+  );
 
-  // Android 13+ permission
   await FirebaseMessaging.instance.requestPermission(
     alert: true,
     badge: true,
     sound: true,
   );
 
-  // Foreground notification
   FirebaseMessaging.onMessage.listen((message) {
     _showLocalNotification(message);
   });
 
-  // Background notification tap
   FirebaseMessaging.onMessageOpenedApp.listen((message) {
     debugPrint('Notification tapped: ${message.data}');
   });
