@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chat_service.dart';
+import '../theme.dart';
 import 'chat_list_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -70,65 +71,98 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.white,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.indigo,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.chat_bubble,
-                  color: Colors.white,
-                  size: 40,
+              const SizedBox(height: 60),
+
+              // Logo
+              Center(
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.primary, AppColors.primaryDark],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.chat_bubble,
+                    color: Colors.white,
+                    size: 50,
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Chatly',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.indigo,
+
+              const SizedBox(height: 24),
+
+              const Center(
+                child: Text(
+                  'Chatly',
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'Simple. Fast. Connected.',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+              const Center(
+                child: Text(
+                  'Simple. Fast. Connected.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
+
               const SizedBox(height: 48),
 
-              if (!_isLogin)
+              if (!_isLogin) ...[
                 TextField(
                   controller: _nameController,
                   decoration: InputDecoration(
-                    labelText: 'Naam',
-                    prefixIcon: const Icon(Icons.person_outline),
+                    hintText: 'Naam',
+                    prefixIcon: const Icon(Icons.person_outline,
+                        color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.background,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
                     ),
                   ),
                 ),
-              if (!_isLogin) const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
 
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined),
+                  hintText: 'Email',
+                  prefixIcon: const Icon(Icons.email_outlined,
+                      color: AppColors.textSecondary),
+                  filled: true,
+                  fillColor: AppColors.background,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
@@ -138,10 +172,14 @@ class _AuthScreenState extends State<AuthScreen> {
                 controller: _passwordController,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
+                  hintText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outline,
+                      color: AppColors.textSecondary),
+                  filled: true,
+                  fillColor: AppColors.background,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
@@ -151,32 +189,37 @@ class _AuthScreenState extends State<AuthScreen> {
                 Text(
                   _error!,
                   style: const TextStyle(color: Colors.red, fontSize: 13),
+                  textAlign: TextAlign.center,
                 ),
               ],
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
 
               SizedBox(
-                width: double.infinity,
-                height: 50,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: _loading ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
+                    elevation: 0,
                   ),
                   child: _loading
                       ? const CircularProgressIndicator(color: Colors.white)
                       : Text(
                           _isLogin ? 'Login' : 'Account Banao',
-                          style: const TextStyle(fontSize: 16),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                 ),
               ),
-              const SizedBox(height: 16),
+
+              const SizedBox(height: 20),
 
               TextButton(
                 onPressed: () {
@@ -189,7 +232,10 @@ class _AuthScreenState extends State<AuthScreen> {
                   _isLogin
                       ? 'Naya account banao'
                       : 'Pehle se account hai? Login karo',
-                  style: const TextStyle(color: Colors.indigo),
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],

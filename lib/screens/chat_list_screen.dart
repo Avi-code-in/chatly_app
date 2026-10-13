@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chat_service.dart';
+import '../theme.dart';
+import 'auth_screen.dart';
 import 'new_chat_screen.dart';
 import 'chat_screen.dart';
 
@@ -12,25 +15,33 @@ class ChatListScreen extends StatelessWidget {
     final chatService = ChatService();
 
     return Scaffold(
+      backgroundColor: AppColors.white,
       appBar: AppBar(
         title: const Text('Chats'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: AppColors.textPrimary),
             onPressed: () async {
               await chatService.signOut();
               if (context.mounted) {
-                Navigator.pushReplacementNamed(context, '/');
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const AuthScreen()),
+                );
               }
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: chatService.getChats(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            );
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -40,23 +51,24 @@ class ChatListScreen extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.chat_bubble_outline,
-                    size: 64,
-                    color: Colors.grey[400],
+                    size: 80,
+                    color: AppColors.textSecondary.withOpacity(0.5),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
+                  const SizedBox(height: 20),
+                  const Text(
                     'Abhi koi chat nahi hai',
                     style: TextStyle(
                       fontSize: 18,
-                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  const Text(
                     'Neeche + dabao aur naya chat shuru karo',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.grey[500],
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -65,6 +77,7 @@ class ChatListScreen extends StatelessWidget {
           }
 
           return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
               final chatDoc = snapshot.data!.docs[index];
@@ -80,29 +93,45 @@ class ChatListScreen extends StatelessWidget {
 
                   final user = userSnapshot.data!;
                   return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 4),
                     leading: CircleAvatar(
-                      backgroundColor: Colors.indigo.shade100,
+                      radius: 28,
+                      backgroundColor: AppColors.primary.withOpacity(0.15),
                       child: Text(
-                        user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                        user.name.isNotEmpty
+                            ? user.name[0].toUpperCase()
+                            : '?',
                         style: const TextStyle(
-                          color: Colors.indigo,
+                          color: AppColors.primary,
                           fontWeight: FontWeight.bold,
+                          fontSize: 20,
                         ),
                       ),
                     ),
                     title: Text(
                       user.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     subtitle: Text(
                       chatData['lastMessage'] ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
                     ),
                     trailing: Text(
                       _formatTime(chatData['lastMessageTime']),
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     onTap: () {
                       Navigator.push(
@@ -123,14 +152,15 @@ class ChatListScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.indigo,
+        backgroundColor: AppColors.primary,
+        elevation: 4,
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const NewChatScreen()),
           );
         },
-        child: const Icon(Icons.add, color: Colors.white),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
     );
   }

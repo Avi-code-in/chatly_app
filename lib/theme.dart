@@ -1,0 +1,36 @@
+import 'package:flutter/material.dart';
+
+class AppColors {
+  static const Color primary = Color(0xFF5B4DFF);
+  static const Color primaryDark = Color(0xFF3D2EE8);
+  static const Color background = Color(0xFFF5F6FA);
+  static const Color white = Colors.white;
+  static const Color textPrimary = Color(0xFF1A1A2E);
+  static const Color textSecondary = Color(0xFF8F92A1);
+  static const Color bubbleMe = Color(0xFF5B4DFF);
+  static const Color bubbleOther = Color(0xFFF0F0F5);
+  static const Color divider = Color(0xFFEDEDF2);
+}
+
+class AppTheme {
+  static ThemeData get theme => ThemeData(
+        primaryColor: AppColors.primary,
+        scaffoldBackgroundColor: AppColors.white,
+        colorScheme: const ColorScheme.light(
+          primary: AppColors.primary,
+          secondary: AppColors.primaryDark,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.white,
+          elevation: 0,
+          centerTitle: false,
+          iconTheme: IconThemeData(color: AppColors.textPrimary),
+          titleTextStyle: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        fontFamily: 'Roboto',
+      );
+}

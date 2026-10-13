@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'screens/auth_screen.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,20 +17,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Chatly',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.black),
-          titleTextStyle: TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
+      theme: AppTheme.theme,
       home: const AuthScreen(),
     );
   }
