@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.chatly_app"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -23,7 +23,7 @@ android {
     defaultConfig {
         applicationId = "com.example.chatly_app"
         minSdk = 23
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
