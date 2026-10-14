@@ -56,23 +56,24 @@ class ChatService {
     }
   }
 
-  // 🔥 Sirf contacts mein wale users dikhao
+  // 🔥 Contacts only - naye API ke saath
   Future<List<UserModel>> getContactsOnly() async {
     final uid = currentUserId;
     if (uid.isEmpty) return [];
 
     try {
       // Permission maango
-      final permission = await FlutterContacts.requestPermission();
-      if (!permission) return [];
+      final status = await FlutterContacts.permissions.request(
+        PermissionType.read,
+      );
+      if (status != PermissionStatus.granted) return [];
 
-      // Phone ke contacts uthao
+      // Contacts uthao
       final contacts = await FlutterContacts.getContacts(
         withProperties: true,
         withPhoto: false,
       );
 
-      // Saare phone numbers nikalo
       final phoneNumbers = <String>[];
       for (var c in contacts) {
         for (var p in c.phones) {
@@ -85,9 +86,7 @@ class ChatService {
 
       if (phoneNumbers.isEmpty) return [];
 
-      // Firestore se matching users dhundho
-      final usersSnapshot =
-          await _firestore.collection('users').get();
+      final usersSnapshot = await _firestore.collection('users').get();
 
       final matchedUsers = <UserModel>[];
       for (var doc in usersSnapshot.docs) {
