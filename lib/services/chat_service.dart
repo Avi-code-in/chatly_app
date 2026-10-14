@@ -1,3 +1,5 @@
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -236,3 +238,101 @@ class ChatService {
     await _auth.signOut();
   }
 }
+
+  Future<List<UserModel>> getContactsOnly() async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return [];
+
+    try {
+      final status = await FlutterContacts.permissions.request(PermissionType.read);
+      if (status != PermissionStatus.granted) return [];
+
+      final contacts = await FlutterContacts.getAll(
+        properties: {ContactProperty.name, ContactProperty.phone},
+      );
+
+      final phoneNumbers = <String>[];
+      for (var c in contacts) {
+        for (var p in c.phones) {
+          final cleaned = p.number.replaceAll(RegExp(r'[^\d]'), '');
+          if (cleaned.length >= 10) {
+            phoneNumbers.add(cleaned.substring(cleaned.length - 10));
+          }
+        }
+      }
+
+      if (phoneNumbers.isEmpty) return [];
+
+      final usersSnapshot = await _firestore.collection('users').get();
+
+      final matchedUsers = <UserModel>[];
+      for (var doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final userPhone = (data['phone'] ?? '').toString();
+        final cleaned = userPhone.replaceAll(RegExp(r'[^\d]'), '');
+        final last10 = cleaned.length >= 10
+            ? cleaned.substring(cleaned.length - 10)
+            : cleaned;
+
+        if (last10.isNotEmpty &&
+            phoneNumbers.contains(last10) &&
+            data['uid'] != uid) {
+          matchedUsers.add(UserModel.fromMap(data));
+        }
+      }
+
+      return matchedUsers;
+    } catch (e) {
+      debugPrint('Contacts error: $e');
+      return [];
+    }
+  }
+
+  Future<List<UserModel>> getContactsOnly() async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return [];
+
+    try {
+      final status = await FlutterContacts.permissions.request(PermissionType.read);
+      if (status != PermissionStatus.granted) return [];
+
+      final contacts = await FlutterContacts.getAll(
+        properties: {ContactProperty.name, ContactProperty.phone},
+      );
+
+      final phoneNumbers = <String>[];
+      for (var c in contacts) {
+        for (var p in c.phones) {
+          final cleaned = p.number.replaceAll(RegExp(r'[^\d]'), '');
+          if (cleaned.length >= 10) {
+            phoneNumbers.add(cleaned.substring(cleaned.length - 10));
+          }
+        }
+      }
+
+      if (phoneNumbers.isEmpty) return [];
+
+      final usersSnapshot = await _firestore.collection('users').get();
+
+      final matchedUsers = <UserModel>[];
+      for (var doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final userPhone = (data['phone'] ?? '').toString();
+        final cleaned = userPhone.replaceAll(RegExp(r'[^\d]'), '');
+        final last10 = cleaned.length >= 10
+            ? cleaned.substring(cleaned.length - 10)
+            : cleaned;
+
+        if (last10.isNotEmpty &&
+            phoneNumbers.contains(last10) &&
+            data['uid'] != uid) {
+          matchedUsers.add(UserModel.fromMap(data));
+        }
+      }
+
+      return matchedUsers;
+    } catch (e) {
+      debugPrint('Contacts error: $e');
+      return [];
+    }
+  }

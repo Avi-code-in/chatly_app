@@ -74,16 +74,11 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = null;
     });
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        setState(() => _loading = false);
-        return;
-      }
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      final googleSignIn = GoogleSignIn.instance;
+      await googleSignIn.initialize();
+      final googleUser = await googleSignIn.authenticate();
+      final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
       final userCredential = await _auth.signInWithCredential(credential);
@@ -91,7 +86,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final existingUser = await _chatService.getUserById(uid);
       if (existingUser == null) {
         await _chatService.createUserIfNotExists(
-            googleUser.displayName ?? 'User', uid);
+            userCredential.user!.displayName ?? "User", uid);
       } else {
         await _chatService.updateOnlineStatus(true);
       }
@@ -102,7 +97,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
     } catch (e) {
-      setState(() => _error = 'Google sign-in failed');
+      setState(() => _error = "Google sign-in failed: $e");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
