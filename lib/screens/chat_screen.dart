@@ -1,13 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/chat_service.dart';
+import '../services/cloudinary_service.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
@@ -31,47 +31,15 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _chatService = ChatService();
+  final _cloudinary = CloudinaryService();
   bool _showEmoji = false;
-  bool _isGroupChat = false;
-  List<String> _groupMembers = [];
-  Map<String, String> _memberNames = {};
+
+  bool get isGroupChat => widget.chatId.startsWith('group_');
 
   @override
   void initState() {
     super.initState();
-    _isGroupChat = widget.chatId.startsWith('group_');
     _chatService.markMessagesAsSeen(widget.chatId);
-    if (_isGroupChat) {
-      _loadGroupMembers();
-    }
-  }
-
-  Future<void> _loadGroupMembers() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .get();
-      if (doc.exists) {
-        final members =
-            List<String>.from(doc.data()?['participants'] ?? []);
-        final names = <String, String>{};
-        for (var id in members) {
-          final user = await _chatService.getUserById(id);
-          if (user != null) {
-            names[id] = user.name;
-          }
-        }
-        if (mounted) {
-          setState(() {
-            _groupMembers = members;
-            _memberNames = names;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading group members: $e');
-    }
   }
 
   @override
@@ -90,321 +58,198 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800,
-      maxHeight: 800,
-      imageQuality: 60,
-    );
+    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 70);
     if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-    await _chatService.sendImageMessage(widget.chatId, base64Image);
+
+    if (!mounted) return;
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    final url = await _cloudinary.uploadImage(File(picked.path));
+    if (mounted) Navigator.pop(context);
+
+    if (url != null) await _chatService.sendImageUrlMessage(widget.chatId, url);
   }
 
   Future<void> _pickFile() async {
     final result = await FilePicker.pickFiles(type: FileType.any);
     if (result == null || result.isEmpty) return;
     final file = result.first;
-    final bytes = await file.readAsBytes();
-    if (bytes.isEmpty) return;
-    final base64File = base64Encode(bytes);
-    await _chatService.sendFileMessage(
-        widget.chatId, file.name, base64File);
+
+    final lower = file.name.toLowerCase();
+    final isImage = lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp');
+
+    if (!mounted) return;
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator(color: AppColors.primary)));
+
+    if (isImage) {
+      final url = await _cloudinary.uploadImage(File(file.path!));
+      if (mounted) Navigator.pop(context);
+      if (url != null) await _chatService.sendImageUrlMessage(widget.chatId, url);
+    } else {
+      final url = await _cloudinary.uploadFile(File(file.path!), file.name);
+      if (mounted) Navigator.pop(context);
+      if (url != null) await _chatService.sendFileUrlMessage(widget.chatId, file.name, url);
+    }
   }
 
-  void _showProfilePicture() {
-    final photo = widget.otherUserPhoto;
-    if (photo == null || !photo.startsWith('data:image')) return;
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: InteractiveViewer(
-                child: Image.memory(_decodeBase64(photo)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              widget.otherUserName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showGroupInfo() {
+  // Forward Dialog (Point 7)
+  void _showForwardDialog(MessageModel msg) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryLight],
-                ),
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: const Icon(Icons.group,
-                  color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              widget.otherUserName,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            Text(
-              'Group · ${_groupMembers.length} members',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Members',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ..._groupMembers.map((id) {
-              final name = _memberNames[id] ?? 'User';
-              final isMe = id == _chatService.currentUserId;
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  child: Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        Set<String> selectedUsers = {};
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 16),
+                  Text('Forward to (${selectedUsers.length}/10)', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 300,
+                    child: StreamBuilder<List<UserModel>>(
+                      stream: _chatService.getUsers(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                        final users = snapshot.data!;
+                        return ListView.builder(
+                          itemCount: users.length,
+                          itemBuilder: (context, index) {
+                            final user = users[index];
+                            final isSelected = selectedUsers.contains(user.uid);
+                            return CheckboxListTile(
+                              value: isSelected,
+                              onChanged: (v) {
+                                if (v == true && selectedUsers.length < 10) {
+                                  setModalState(() => selectedUsers.add(user.uid));
+                                } else if (v == false) {
+                                  setModalState(() => selectedUsers.remove(user.uid));
+                                }
+                              },
+                              title: Text(user.name),
+                              secondary: CircleAvatar(child: Text(user.name[0].toUpperCase())),
+                              activeColor: AppColors.primary,
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
-                ),
-                title: Text(
-                  isMe ? '$name (You)' : name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ElevatedButton(
+                      onPressed: selectedUsers.isEmpty ? null : () async {
+                        Navigator.pop(context);
+                        await _chatService.forwardMessage(msg, selectedUsers.toList());
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message forwarded!')));
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, minimumSize: const Size(double.infinity, 50)),
+                      child: const Text('Forward', style: TextStyle(color: Colors.white)),
+                    ),
                   ),
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
   void _showMessageOptions(MessageModel msg, bool isMe) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (msg.type == 'text')
-                ListTile(
-                  leading: const Icon(Icons.copy,
-                      color: AppColors.textPrimary),
-                  title: const Text('Copy'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Clipboard.setData(ClipboardData(text: msg.text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Message copied')),
-                    );
-                  },
-                ),
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            if (msg.type == 'text')
               ListTile(
-                leading: const Icon(Icons.share,
-                    color: AppColors.textPrimary),
-                title: const Text('Share'),
+                leading: const Icon(Icons.copy, color: AppColors.textPrimary),
+                title: const Text('Copy'),
                 onTap: () {
                   Navigator.pop(context);
-                  final shareText =
-                      msg.text.isNotEmpty ? msg.text : 'Shared from Chatly';
-                  Share.share(shareText);
+                  Clipboard.setData(ClipboardData(text: msg.text));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied')));
                 },
               ),
-              if (isMe)
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text('Delete',
-                      style: TextStyle(color: Colors.red)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _chatService.deleteMessage(widget.chatId, msg.id);
-                  },
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
+            ListTile(
+              leading: const Icon(Icons.forward, color: AppColors.textPrimary),
+              title: const Text('Forward'),
+              onTap: () {
+                Navigator.pop(context);
+                _showForwardDialog(msg);
+              },
+            ),
+            if (isMe)
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _chatService.deleteMessage(widget.chatId, msg.id);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = widget.otherUserPhoto != null &&
-        widget.otherUserPhoto!.startsWith('data:image');
+    final hasImage = widget.otherUserPhoto != null && widget.otherUserPhoto!.startsWith('data:image');
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.white,
         titleSpacing: 0,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: Row(
           children: [
             GestureDetector(
-              onTap: _isGroupChat ? _showGroupInfo : _showProfilePicture,
-              child: _isGroupChat
-                  ? Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppColors.primary,
-                            AppColors.primaryLight
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.group,
-                          color: Colors.white, size: 22),
-                    )
+              onTap: isGroupChat ? null : () {
+                if (hasImage) {
+                  showDialog(context: context, builder: (context) => Dialog(
+                    backgroundColor: Colors.transparent,
+                    child: InteractiveViewer(child: Image.memory(_decodeBase64(widget.otherUserPhoto!))),
+                  ));
+                }
+              },
+              child: isGroupChat
+                  ? Container(width: 40, height: 40, decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryLight]), borderRadius: BorderRadius.circular(20)), child: const Icon(Icons.group, color: Colors.white, size: 22))
                   : CircleAvatar(
                       radius: 20,
-                      backgroundColor:
-                          AppColors.primary.withOpacity(0.15),
-                      backgroundImage: hasImage
-                          ? MemoryImage(
-                              _decodeBase64(widget.otherUserPhoto!))
-                          : null,
-                      child: !hasImage
-                          ? Text(
-                              widget.otherUserName.isNotEmpty
-                                  ? widget.otherUserName[0]
-                                      .toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            )
-                          : null,
+                      backgroundColor: AppColors.primary.withOpacity(0.15),
+                      backgroundImage: hasImage ? MemoryImage(_decodeBase64(widget.otherUserPhoto!)) : null,
+                      child: !hasImage ? Text(widget.otherUserName.isNotEmpty ? widget.otherUserName[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)) : null,
                     ),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.otherUserName,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    _isGroupChat
-                        ? '${_groupMembers.length} members'
-                        : 'Online',
-                    style: TextStyle(
-                      color: _isGroupChat
-                          ? AppColors.textSecondary
-                          : AppColors.online,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.otherUserName, style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+                Text(isGroupChat ? 'Group' : 'Online', style: const TextStyle(color: AppColors.online, fontSize: 12)),
+              ],
             ),
           ],
         ),
         actions: [
-          if (!_isGroupChat) ...[
-            IconButton(
-              icon: const Icon(Icons.videocam_outlined,
-                  color: AppColors.primary),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.call_outlined,
-                  color: AppColors.primary),
-              onPressed: () {},
-            ),
-          ],
-          IconButton(
-            icon: const Icon(Icons.more_vert,
-                color: AppColors.textPrimary),
-            onPressed: _isGroupChat ? _showGroupInfo : () {},
-          ),
+          IconButton(icon: const Icon(Icons.videocam_outlined, color: AppColors.primary), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.call_outlined, color: AppColors.primary), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.more_vert, color: AppColors.textPrimary), onPressed: () {}),
         ],
       ),
       body: Column(
@@ -413,31 +258,15 @@ class _ChatScreenState extends State<ChatScreen> {
             child: StreamBuilder<List<MessageModel>>(
               stream: _chatService.getMessages(widget.chatId),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.primary),
-                  );
-                }
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 60,
-                          color: AppColors.textSecondary.withOpacity(0.5),
-                        ),
+                        Icon(Icons.chat_bubble_outline, size: 60, color: AppColors.textSecondary.withOpacity(0.5)),
                         const SizedBox(height: 16),
-                        const Text(
-                          'No messages yet.\nSend the first message!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
+                        const Text('No messages yet.\nSend the first message!', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
                       ],
                     ),
                   );
@@ -449,8 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    final isMe =
-                        msg.senderId == _chatService.currentUserId;
+                    final isMe = msg.senderId == _chatService.currentUserId;
                     return GestureDetector(
                       onLongPress: () => _showMessageOptions(msg, isMe),
                       child: _buildMessageBubble(msg, isMe),
@@ -468,45 +296,22 @@ class _ChatScreenState extends State<ChatScreen> {
                   _messageController.text += emoji.emoji;
                   setState(() {});
                 },
-                config: const Config(
-                  height: 280,
-                  checkPlatformCompatibility: true,
-                ),
+                config: const Config(height: 280, checkPlatformCompatibility: true),
               ),
             ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, -2))],
             ),
             child: SafeArea(
               child: Row(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primary.withOpacity(0.15),
-                          AppColors.primaryLight.withOpacity(0.1),
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.add,
-                          color: AppColors.primary, size: 22),
-                      onPressed: _pickFile,
-                    ),
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primary.withOpacity(0.15), AppColors.primaryLight.withOpacity(0.1)]), shape: BoxShape.circle),
+                    child: IconButton(icon: const Icon(Icons.add, color: AppColors.primary, size: 22), onPressed: _pickFile),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -514,68 +319,24 @@ class _ChatScreenState extends State<ChatScreen> {
                       controller: _messageController,
                       textCapitalization: TextCapitalization.sentences,
                       onChanged: (_) => setState(() {}),
-                      onTap: () {
-                        if (_showEmoji) setState(() => _showEmoji = false);
-                      },
+                      onTap: () { if (_showEmoji) setState(() => _showEmoji = false); },
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
-                        hintStyle: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 15,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(28),
-                          borderSide: BorderSide.none,
-                        ),
+                        hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 15),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
                         filled: true,
                         fillColor: AppColors.background,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      _showEmoji
-                          ? Icons.keyboard
-                          : Icons.emoji_emotions_outlined,
-                      color: AppColors.textSecondary,
-                    ),
-                    onPressed: () =>
-                        setState(() => _showEmoji = !_showEmoji),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.attach_file,
-                        color: AppColors.textSecondary),
-                    onPressed: _pickFile,
-                  ),
+                  IconButton(icon: Icon(_showEmoji ? Icons.keyboard : Icons.emoji_emotions_outlined, color: AppColors.textSecondary), onPressed: () => setState(() => _showEmoji = !_showEmoji)),
+                  IconButton(icon: const Icon(Icons.attach_file, color: AppColors.textSecondary), onPressed: _pickFile),
                   Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          AppColors.primary,
-                          AppColors.primaryLight
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withOpacity(0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.send,
-                          color: Colors.white, size: 20),
-                      onPressed: _sendMessage,
-                    ),
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryLight]), shape: BoxShape.circle, boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4))]),
+                    child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 20), onPressed: _sendMessage),
                   ),
                 ],
               ),
@@ -587,129 +348,59 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(MessageModel msg, bool isMe) {
-    // Group chat mein sender ka naam dikhao
-    final senderName = _isGroupChat ? (_memberNames[msg.senderId] ?? '') : '';
-
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.all(10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: isMe ? AppColors.bubbleMe : AppColors.bubbleOther,
+          color: isMe ? AppColors.primary : AppColors.white,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft:
-                isMe ? const Radius.circular(20) : const Radius.circular(4),
-            bottomRight:
-                isMe ? const Radius.circular(4) : const Radius.circular(20),
+            bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
+            bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
           ),
-          boxShadow: isMe
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : null,
+          boxShadow: isMe ? [BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 3))] : null,
         ),
         child: Column(
-          crossAxisAlignment:
-              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            // Group mein sender name dikhao
-            if (_isGroupChat && !isMe && senderName.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  senderName,
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            if (msg.type == 'image' && msg.imageData != null)
+            if (msg.type == 'image' && msg.imageUrl != null)
               GestureDetector(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => Dialog(
-                      backgroundColor: Colors.transparent,
-                      insetPadding: const EdgeInsets.all(10),
-                      child: InteractiveViewer(
-                        child: Image.memory(_decodeBase64(msg.imageData!)),
-                      ),
-                    ),
-                  );
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.memory(
-                    _decodeBase64(msg.imageData!),
-                    width: 200,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                onTap: () => showDialog(context: context, builder: (context) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  insetPadding: const EdgeInsets.all(10),
+                  child: InteractiveViewer(child: Image.network(msg.imageUrl!)),
+                )),
+                child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(msg.imageUrl!, width: 200, fit: BoxFit.cover)),
+              )
+            else if (msg.type == 'video' && msg.videoUrl != null)
+              Container(
+                width: 200, height: 150,
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                child: const Center(child: Icon(Icons.play_circle_fill, color: Colors.white, size: 50)),
               )
             else if (msg.type == 'file' && msg.fileName != null)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.insert_drive_file,
-                    color: isMe ? Colors.white : AppColors.primary,
-                  ),
+                  Icon(Icons.insert_drive_file, color: isMe ? Colors.white : AppColors.primary),
                   const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      msg.fileName!,
-                      style: TextStyle(
-                        color:
-                            isMe ? Colors.white : AppColors.textPrimary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                  Flexible(child: Text(msg.fileName!, style: TextStyle(color: isMe ? Colors.white : AppColors.textPrimary, fontSize: 14))),
                 ],
               )
             else
-              Text(
-                msg.text,
-                style: TextStyle(
-                  color: isMe ? Colors.white : AppColors.textPrimary,
-                  fontSize: 15,
-                  height: 1.4,
-                ),
-              ),
+              Text(msg.text, style: TextStyle(color: isMe ? Colors.white : AppColors.textPrimary, fontSize: 15, height: 1.4)),
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _formatMsgTime(msg.timestamp),
-                  style: TextStyle(
-                    color: isMe
-                        ? Colors.white70
-                        : AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
+                Text(_formatMsgTime(msg.timestamp), style: TextStyle(color: isMe ? Colors.white70 : AppColors.textSecondary, fontSize: 11)),
                 if (isMe) ...[
                   const SizedBox(width: 4),
-                  Icon(
-                    msg.seen ? Icons.done_all : Icons.done,
-                    size: 14,
-                    color: msg.seen
-                        ? Colors.lightBlueAccent
-                        : Colors.white70,
-                  ),
+                  Icon(msg.seen ? Icons.done_all : Icons.done, size: 14, color: msg.seen ? Colors.lightBlueAccent : Colors.white70),
                 ],
               ],
             ),

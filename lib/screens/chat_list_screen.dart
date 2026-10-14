@@ -36,30 +36,42 @@ class _ChatListScreenState extends State<ChatListScreen> {
           color: AppColors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 12,
-              offset: const Offset(0, -2),
+              color: AppColors.primary.withOpacity(0.08),
+              blurRadius: 24,
+              offset: const Offset(0, -6),
             ),
           ],
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          backgroundColor: AppColors.white,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.textSecondary,
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          selectedFontSize: 11,
-          unselectedFontSize: 11,
-          items: const [
-            BottomNavigationBarItem(
-                icon: Icon(Icons.chat_bubble), label: 'Chats'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.access_time), label: 'Status'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.person), label: 'Profile'),
-          ],
+        child: SafeArea(
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (i) => setState(() => _currentIndex = i),
+            backgroundColor: Colors.transparent,
+            selectedItemColor: AppColors.primary,
+            unselectedItemColor: AppColors.textSecondary,
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.chat_bubble_outline),
+                activeIcon: Icon(Icons.chat_bubble),
+                label: 'Chats',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.access_time),
+                activeIcon: Icon(Icons.access_time_filled),
+                label: 'Status',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline),
+                activeIcon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -83,75 +95,55 @@ class _ChatsTabState extends State<_ChatsTab> {
     return SafeArea(
       child: Column(
         children: [
+          // MODERN HEADER
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.menu,
-                      color: AppColors.textPrimary),
-                  onPressed: () {},
+                // Menu Icon with gradient bg
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.softBlueGradient,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.menu, color: AppColors.primary),
+                    onPressed: () {},
+                  ),
                 ),
-                const Text(
-                  'Chatly',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                const SizedBox(width: 14),
+                // STYLISH "Chatly" TITLE
+                ShaderMask(
+                  shaderCallback: (bounds) => AppTheme.blueGradient.createShader(bounds),
+                  child: const Text(
+                    'Chatly',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
                 const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.search,
-                      color: AppColors.textPrimary),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const NewChatScreen()),
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.group_add,
-                      color: AppColors.textPrimary),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CreateGroupScreen()),
-                    );
-                  },
-                ),
+                _modernIconButton(Icons.search, () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NewChatScreen()),
+                  );
+                }),
+                const SizedBox(width: 8),
+                _modernIconButton(Icons.group_add, () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CreateGroupScreen()),
+                  );
+                }),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search chats, contacts...',
-                  hintStyle: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                  ),
-                  prefixIcon: Icon(Icons.search,
-                      color: AppColors.textSecondary),
-                  suffixIcon: Icon(Icons.tune,
-                      color: AppColors.textSecondary),
-                  border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
+
+          // Filter Chips
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -167,15 +159,16 @@ class _ChatsTabState extends State<_ChatsTab> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          // Chats List
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: chatService.getChats(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.primary),
+                    child: CircularProgressIndicator(color: AppColors.primary),
                   );
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -183,15 +176,15 @@ class _ChatsTabState extends State<_ChatsTab> {
                 }
 
                 var chats = snapshot.data!
-                    .where((chat) =>
-                        (chat['lastMessage'] ?? '').toString().isNotEmpty)
+                    .where((chat) => (chat['lastMessage'] ?? '').toString().isNotEmpty)
                     .toList();
 
-                // Filter apply karo
                 if (_filterIndex == 2) {
                   chats = chats.where((c) => c['isGroup'] == true).toList();
-                } else if (_filterIndex == 0) {
-                  // All
+                } else if (_filterIndex == 1) {
+                  chats = chats.where((c) => (c['unreadCount'] ?? 0) > 0).toList();
+                } else if (_filterIndex == 3) {
+                  chats = chats.where((c) => c['isFavorite'] == true).toList();
                 }
 
                 if (chats.isEmpty) return _emptyState();
@@ -212,13 +205,11 @@ class _ChatsTabState extends State<_ChatsTab> {
                     return FutureBuilder<UserModel?>(
                       future: chatService.getOtherUser(chatId),
                       builder: (context, userSnapshot) {
-                        if (!userSnapshot.hasData ||
-                            userSnapshot.data == null) {
+                        if (!userSnapshot.hasData || userSnapshot.data == null) {
                           return const SizedBox.shrink();
                         }
                         final user = userSnapshot.data!;
-                        return _chatTile(
-                            context, chatId, chatData, user);
+                        return _chatTile(context, chatId, chatData, user);
                       },
                     );
                   },
@@ -231,23 +222,38 @@ class _ChatsTabState extends State<_ChatsTab> {
     );
   }
 
+  Widget _modernIconButton(IconData icon, VoidCallback onTap) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppTheme.softBlueGradient,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: AppColors.primary),
+        onPressed: onTap,
+      ),
+    );
+  }
+
   Widget _filterChip(String label, int index) {
     final selected = _filterIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _filterIndex = index),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.background,
-          borderRadius: BorderRadius.circular(20),
+          gradient: selected ? AppTheme.blueGradient : null,
+          color: selected ? null : AppColors.background,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: selected ? AppTheme.blueShadow : null,
         ),
         child: Text(
           label,
           style: TextStyle(
             color: selected ? Colors.white : AppColors.textSecondary,
             fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -259,27 +265,31 @@ class _ChatsTabState extends State<_ChatsTab> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 80,
-            color: AppColors.textSecondary.withOpacity(0.5),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: AppTheme.softBlueGradient,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline,
+              size: 60,
+              color: AppColors.primary,
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           const Text(
             'No chats yet',
             style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
           const Text(
             'Start a new chat or create a group',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -289,17 +299,16 @@ class _ChatsTabState extends State<_ChatsTab> {
   Widget _groupTile(BuildContext context, String chatId,
       Map<String, dynamic> chatData, String groupName) {
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChatScreen(
-              chatId: chatId,
-              otherUserName: groupName,
-            ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            chatId: chatId,
+            otherUserName: groupName,
           ),
-        );
-      },
+        ),
+      ),
+      borderRadius: BorderRadius.circular(20),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Row(
@@ -308,10 +317,9 @@ class _ChatsTabState extends State<_ChatsTab> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryLight],
-                ),
-                borderRadius: BorderRadius.circular(28),
+                gradient: AppTheme.blueGradient,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: AppTheme.blueShadow,
               ),
               child: const Icon(Icons.group, color: Colors.white, size: 28),
             ),
@@ -323,7 +331,7 @@ class _ChatsTabState extends State<_ChatsTab> {
                   Text(
                     groupName,
                     style: const TextStyle(
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       fontSize: 16,
                       color: AppColors.textPrimary,
                     ),
@@ -354,18 +362,17 @@ class _ChatsTabState extends State<_ChatsTab> {
     final isMe = lastSender == ChatService().currentUserId;
 
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChatScreen(
-              chatId: chatId,
-              otherUserName: user.name,
-              otherUserPhoto: user.photoUrl,
-            ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            chatId: chatId,
+            otherUserName: user.name,
+            otherUserPhoto: user.photoUrl,
           ),
-        );
-      },
+        ),
+      ),
+      borderRadius: BorderRadius.circular(20),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Row(
@@ -382,7 +389,7 @@ class _ChatsTabState extends State<_ChatsTab> {
                         child: Text(
                           user.name,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                             fontSize: 16,
                             color: AppColors.textPrimary,
                           ),
@@ -393,6 +400,7 @@ class _ChatsTabState extends State<_ChatsTab> {
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -417,9 +425,6 @@ class _ChatsTabState extends State<_ChatsTab> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.volume_off,
-                          size: 16, color: AppColors.textSecondary),
                     ],
                   ),
                 ],
@@ -437,31 +442,25 @@ class _ChatsTabState extends State<_ChatsTab> {
     return Stack(
       children: [
         Container(
+          padding: const EdgeInsets.all(2),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            gradient: hasImage ? null : AppTheme.blueGradient,
+            boxShadow: AppTheme.blueShadow,
           ),
           child: CircleAvatar(
             radius: radius,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundColor: AppColors.white,
             backgroundImage: hasImage
                 ? MemoryImage(_decodeBase64(user.photoUrl!))
                 : null,
             child: !hasImage
                 ? Text(
-                    user.name.isNotEmpty
-                        ? user.name[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                    style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.bold,
-                      fontSize: radius * 0.7,
+                      fontSize: 22,
                     ),
                   )
                 : null,
@@ -477,11 +476,11 @@ class _ChatsTabState extends State<_ChatsTab> {
               decoration: BoxDecoration(
                 color: AppColors.online,
                 shape: BoxShape.circle,
-                border: Border.all(color: AppColors.white, width: 2),
+                border: Border.all(color: AppColors.white, width: 2.5),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.online.withOpacity(0.5),
-                    blurRadius: 5,
+                    color: AppColors.online.withOpacity(0.6),
+                    blurRadius: 8,
                   ),
                 ],
               ),

@@ -2,8 +2,10 @@ class MessageModel {
   final String id;
   final String senderId;
   final String text;
-  final String type; // text, image, file
+  final String type; // text, image, video, file
   final String? imageData;
+  final String? imageUrl;
+  final String? videoUrl;
   final String? fileName;
   final String? fileData;
   final DateTime timestamp;
@@ -15,6 +17,8 @@ class MessageModel {
     required this.text,
     this.type = 'text',
     this.imageData,
+    this.imageUrl,
+    this.videoUrl,
     this.fileName,
     this.fileData,
     required this.timestamp,
@@ -27,6 +31,8 @@ class MessageModel {
       'text': text,
       'type': type,
       'imageData': imageData,
+      'imageUrl': imageUrl,
+      'videoUrl': videoUrl,
       'fileName': fileName,
       'fileData': fileData,
       'timestamp': timestamp.toIso8601String(),
@@ -41,6 +47,8 @@ class MessageModel {
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
       imageData: map['imageData'],
+      imageUrl: map['imageUrl'],
+      videoUrl: map['videoUrl'],
       fileName: map['fileName'],
       fileData: map['fileData'],
       timestamp: DateTime.tryParse(map['timestamp'] ?? '') ?? DateTime.now(),

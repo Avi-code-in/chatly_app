@@ -45,8 +45,8 @@ class ProfileScreen extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                AppColors.primary.withOpacity(0.08),
-                AppColors.primaryLight.withOpacity(0.15),
+                AppColors.primary.withOpacity(0.15),
+                AppColors.accent.withOpacity(0.15),
               ],
             ),
             borderRadius: const BorderRadius.only(

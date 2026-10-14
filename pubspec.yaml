@@ -23,6 +23,7 @@ dependencies:
   google_fonts: ^8.2.1
   share_plus: ^13.3.1
   uuid: ^4.6.0
+  cloudinary_public: ^0.23.1
 
 dev_dependencies:
   flutter_test:

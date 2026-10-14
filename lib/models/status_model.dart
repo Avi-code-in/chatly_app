@@ -3,9 +3,10 @@ class StatusModel {
   final String userId;
   final String userName;
   final String? userPhoto;
-  final String type; // text, image
+  final String type; // text, image, video
   final String text;
-  final String? imageData;
+  final String? imageUrl;
+  final String? videoUrl;
   final DateTime timestamp;
   final DateTime expiresAt;
   final List<String> viewers;
@@ -17,7 +18,8 @@ class StatusModel {
     this.userPhoto,
     required this.type,
     this.text = '',
-    this.imageData,
+    this.imageUrl,
+    this.videoUrl,
     required this.timestamp,
     required this.expiresAt,
     this.viewers = const [],
@@ -31,7 +33,8 @@ class StatusModel {
       'userPhoto': userPhoto,
       'type': type,
       'text': text,
-      'imageData': imageData,
+      'imageUrl': imageUrl,
+      'videoUrl': videoUrl,
       'timestamp': timestamp.toIso8601String(),
       'expiresAt': expiresAt.toIso8601String(),
       'viewers': viewers,
@@ -46,11 +49,10 @@ class StatusModel {
       userPhoto: map['userPhoto'],
       type: map['type'] ?? 'text',
       text: map['text'] ?? '',
-      imageData: map['imageData'],
-      timestamp:
-          DateTime.tryParse(map['timestamp'] ?? '') ?? DateTime.now(),
-      expiresAt:
-          DateTime.tryParse(map['expiresAt'] ?? '') ?? DateTime.now(),
+      imageUrl: map['imageUrl'],
+      videoUrl: map['videoUrl'],
+      timestamp: DateTime.tryParse(map['timestamp'] ?? '') ?? DateTime.now(),
+      expiresAt: DateTime.tryParse(map['expiresAt'] ?? '') ?? DateTime.now(),
       viewers: List<String>.from(map['viewers'] ?? []),
     );
   }

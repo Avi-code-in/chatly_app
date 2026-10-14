@@ -376,3 +376,158 @@ class ChatService {
     await _auth.signOut();
   }
 }
+
+  // Cloudinary URL ke saath image message
+  Future<void> sendImageUrlMessage(String chatId, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'image',
+      'imageUrl': url,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '📷 Photo');
+  }
+
+  // Cloudinary URL ke saath video message
+  Future<void> sendVideoUrlMessage(String chatId, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'video',
+      'videoUrl': url,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '🎥 Video');
+  }
+
+  // Cloudinary URL ke saath image status
+  Future<void> uploadImageUrlStatus(String url) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'image',
+      'text': '',
+      'imageUrl': url,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  // Cloudinary URL ke saath video status
+  Future<void> uploadVideoUrlStatus(String url) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'video',
+      'text': '',
+      'videoUrl': url,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  // Cloudinary URL ke saath image message
+  Future<void> sendImageUrlMessage(String chatId, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'image',
+      'imageUrl': url,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '📷 Photo');
+  }
+
+  // Cloudinary URL ke saath video message
+  Future<void> sendVideoUrlMessage(String chatId, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'video',
+      'videoUrl': url,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '🎥 Video');
+  }
+
+  // Cloudinary URL ke saath image status
+  Future<void> uploadImageUrlStatus(String url) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'image',
+      'text': '',
+      'imageUrl': url,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  // Cloudinary URL ke saath video status
+  Future<void> uploadVideoUrlStatus(String url) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'video',
+      'text': '',
+      'videoUrl': url,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  // Forward Message
+  Future<void> forwardMessage(MessageModel msg, List<String> userIds) async {
+    for (var uid in userIds) {
+      final chatId = await createOrGetChatRoom(uid);
+      if (msg.type == 'image' && msg.imageUrl != null) {
+        await sendImageUrlMessage(chatId, msg.imageUrl!);
+      } else if (msg.type == 'file' && msg.fileName != null && msg.fileData != null) {
+        await sendFileUrlMessage(chatId, msg.fileName!, msg.fileData!);
+      } else {
+        await sendMessage(chatId, msg.text);
+      }
+    }
+  }
+
+  // File URL message
+  Future<void> sendFileUrlMessage(String chatId, String fileName, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'file',
+      'fileName': fileName,
+      'fileData': url, // URL as data
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '📎 $fileName');
+  }
