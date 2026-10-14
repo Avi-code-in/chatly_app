@@ -1,8 +1,7 @@
-import 'package:flutter/services.dart';
-import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -100,7 +99,8 @@ class _ChatScreenState extends State<ChatScreen> {
               const SizedBox(height: 16),
               if (msg.type == 'text')
                 ListTile(
-                  leading: const Icon(Icons.copy, color: AppColors.textPrimary),
+                  leading: const Icon(Icons.copy,
+                      color: AppColors.textPrimary),
                   title: const Text('Copy'),
                   onTap: () {
                     Navigator.pop(context);
@@ -111,44 +111,19 @@ class _ChatScreenState extends State<ChatScreen> {
                   },
                 ),
               ListTile(
-                leading: const Icon(Icons.share, color: AppColors.textPrimary),
+                leading: const Icon(Icons.share,
+                    color: AppColors.textPrimary),
                 title: const Text('Share'),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Share coming soon')),
-                  );
-                },
+                onTap: () => Navigator.pop(context),
               ),
               if (isMe)
                 ListTile(
                   leading: const Icon(Icons.delete, color: Colors.red),
-                  title:
-                      const Text('Delete', style: TextStyle(color: Colors.red)),
+                  title: const Text('Delete',
+                      style: TextStyle(color: Colors.red)),
                   onTap: () async {
                     Navigator.pop(context);
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Delete message?'),
-                        content:
-                            const Text('This message will be deleted for everyone.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Delete',
-                                style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await _chatService.deleteMessage(widget.chatId, msg.id);
-                    }
+                    await _chatService.deleteMessage(widget.chatId, msg.id);
                   },
                 ),
               const SizedBox(height: 8),
@@ -170,57 +145,24 @@ class _ChatScreenState extends State<ChatScreen> {
         titleSpacing: 0,
         title: Row(
           children: [
-            GestureDetector(
-              onTap: () {
-                if (hasImage) {
-                  showDialog(
-                    context: context,
-                    builder: (context) => Dialog(
-                      backgroundColor: Colors.transparent,
-                      insetPadding: const EdgeInsets.all(20),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: Image.memory(
-                              _decodeBase64(widget.otherUserPhoto!),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            widget.otherUserName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: AppColors.primary.withOpacity(0.15),
+              backgroundImage: hasImage
+                  ? MemoryImage(_decodeBase64(widget.otherUserPhoto!))
+                  : null,
+              child: !hasImage
+                  ? Text(
+                      widget.otherUserName.isNotEmpty
+                          ? widget.otherUserName[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
-                    ),
-                  );
-                }
-              },
-              child: CircleAvatar(
-                radius: 20,
-                backgroundColor: AppColors.primary.withOpacity(0.15),
-                backgroundImage: hasImage
-                    ? MemoryImage(_decodeBase64(widget.otherUserPhoto!))
-                    : null,
-                child: !hasImage
-                    ? Text(
-                        widget.otherUserName.isNotEmpty
-                            ? widget.otherUserName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      )
-                    : null,
-              ),
+                    )
+                  : null,
             ),
             const SizedBox(width: 12),
             Column(
@@ -244,15 +186,17 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.call, color: AppColors.primary),
+            icon: const Icon(Icons.videocam_outlined,
+                color: AppColors.primary),
             onPressed: () {},
           ),
           IconButton(
-            icon: const Icon(Icons.videocam, color: AppColors.primary),
+            icon: const Icon(Icons.call_outlined, color: AppColors.primary),
             onPressed: () {},
           ),
           IconButton(
-            icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
+            icon: const Icon(Icons.more_vert,
+                color: AppColors.textPrimary),
             onPressed: () {},
           ),
         ],
@@ -340,11 +284,20 @@ class _ChatScreenState extends State<ChatScreen> {
             child: SafeArea(
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.add_circle,
-                        color: AppColors.primary, size: 28),
-                    onPressed: _pickFile,
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.add,
+                          color: AppColors.primary, size: 22),
+                      onPressed: _pickFile,
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       controller: _messageController,
@@ -380,9 +333,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           : Icons.emoji_emotions_outlined,
                       color: AppColors.textSecondary,
                     ),
-                    onPressed: () {
-                      setState(() => _showEmoji = !_showEmoji);
-                    },
+                    onPressed: () =>
+                        setState(() => _showEmoji = !_showEmoji),
                   ),
                   IconButton(
                     icon: const Icon(Icons.attach_file,
@@ -394,7 +346,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     height: 44,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryDark],
+                        colors: [
+                          AppColors.primary,
+                          AppColors.primaryLight
+                        ],
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
@@ -406,7 +361,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ],
                     ),
                     child: IconButton(
-                      icon: const Icon(Icons.send_rounded,
+                      icon: const Icon(Icons.send,
                           color: Colors.white, size: 20),
                       onPressed: _sendMessage,
                     ),
@@ -445,26 +400,12 @@ class _ChatScreenState extends State<ChatScreen> {
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             if (msg.type == 'image' && msg.imageData != null)
-              GestureDetector(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => Dialog(
-                      backgroundColor: Colors.transparent,
-                      insetPadding: const EdgeInsets.all(10),
-                      child: InteractiveViewer(
-                        child: Image.memory(_decodeBase64(msg.imageData!)),
-                      ),
-                    ),
-                  );
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.memory(
-                    _decodeBase64(msg.imageData!),
-                    width: 200,
-                    fit: BoxFit.cover,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  _decodeBase64(msg.imageData!),
+                  width: 200,
+                  fit: BoxFit.cover,
                 ),
               )
             else if (msg.type == 'file' && msg.fileName != null)

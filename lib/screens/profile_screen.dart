@@ -20,8 +20,7 @@ class ProfileScreen extends StatelessWidget {
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data == null) {
             return const Center(
-              child:
-                  CircularProgressIndicator(color: AppColors.primary),
+              child: CircularProgressIndicator(color: AppColors.primary),
             );
           }
           final user = snapshot.data!;
@@ -39,16 +38,15 @@ class ProfileScreen extends StatelessWidget {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        // Header with gradient
         Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                AppColors.primary.withOpacity(0.1),
-                AppColors.primary.withOpacity(0.05),
+                AppColors.primary.withOpacity(0.08),
+                AppColors.primaryLight.withOpacity(0.15),
               ],
             ),
             borderRadius: const BorderRadius.only(
@@ -63,9 +61,10 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   const SizedBox(),
                   IconButton(
-                    icon: const Icon(Icons.settings,
+                    icon: const Icon(Icons.edit,
                         color: AppColors.textPrimary),
-                    onPressed: () {},
+                    onPressed: () =>
+                        _editName(context, service, user.name),
                   ),
                 ],
               ),
@@ -123,7 +122,7 @@ class ProfileScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                user.phone,
+                user.phone.isNotEmpty ? user.phone : user.email,
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
@@ -131,8 +130,8 @@ class ProfileScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.online.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -164,30 +163,16 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        _menuItem(
-          Icons.person_outline,
-          'Account',
-          'Privacy, security, change number',
-          () => _editName(context, service, user.name),
-        ),
-        _menuItem(
-          Icons.notifications_outlined,
-          'Notifications',
-          'Message, group & call tones',
-          () {},
-        ),
-        _menuItem(
-          Icons.storage_outlined,
-          'Storage & Data',
-          'Network usage, auto-download',
-          () {},
-        ),
-        _menuItem(
-          Icons.help_outline,
-          'Help & Support',
-          'FAQ, contact us',
-          () {},
-        ),
+        _menuItem(Icons.info_outline, 'About', 'Good vibes only ✨',
+            () {}),
+        _menuItem(Icons.person_outline, 'Account',
+            'Phone, email, privacy', () {}),
+        _menuItem(Icons.notifications_outlined, 'Notifications',
+            'Messages, calls, groups', () {}),
+        _menuItem(Icons.storage_outlined, 'Storage & Data',
+            'Network usage, media auto-download', () {}),
+        _menuItem(Icons.help_outline, 'Help & Support', 'FAQ, contact us',
+            () {}),
         const SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -276,11 +261,6 @@ class ProfileScreen extends StatelessWidget {
     final bytes = await picked.readAsBytes();
     final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
     await service.updateProfilePicture(base64Image);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile picture updated!')),
-      );
-    }
   }
 
   Future<void> _editName(BuildContext context, ChatService service,
@@ -325,8 +305,8 @@ class ProfileScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log Out',
-                style: TextStyle(color: Colors.red)),
+            child:
+                const Text('Log Out', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

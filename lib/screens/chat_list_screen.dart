@@ -24,6 +24,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final pages = [
       const _ChatsTab(),
       const ContactsScreen(),
+      const Center(child: Text('Status')),
       const ProfileScreen(),
     ];
 
@@ -36,13 +37,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
               height: 56,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryDark],
+                  colors: [AppColors.primary, AppColors.primaryLight],
                 ),
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.primary.withOpacity(0.4),
-                    blurRadius: 12,
+                    blurRadius: 15,
                     offset: const Offset(0, 6),
                   ),
                 ],
@@ -78,21 +79,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
           unselectedItemColor: AppColors.textSecondary,
           type: BottomNavigationBarType.fixed,
           elevation: 0,
-          selectedFontSize: 12,
-          unselectedFontSize: 12,
+          selectedFontSize: 11,
+          unselectedFontSize: 11,
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble),
-              label: 'Chats',
-            ),
+                icon: Icon(Icons.chat_bubble), label: 'Chats'),
             BottomNavigationBarItem(
-              icon: Icon(Icons.people),
-              label: 'Status',
-            ),
+                icon: Icon(Icons.people), label: 'Contacts'),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profile',
-            ),
+                icon: Icon(Icons.access_time), label: 'Status'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       ),
@@ -113,35 +110,30 @@ class _ChatsTab extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                IconButton(
+                  icon: const Icon(Icons.menu,
+                      color: AppColors.textPrimary),
+                  onPressed: () {},
+                ),
                 const Text(
                   'Chatly',
                   style: TextStyle(
-                    fontSize: 30,
+                    fontSize: 26,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.search,
-                          color: AppColors.textPrimary),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const NewChatScreen()),
-                        );
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.more_vert,
-                          color: AppColors.textPrimary),
-                      onPressed: () {},
-                    ),
-                  ],
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.search,
+                      color: AppColors.textPrimary),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert,
+                      color: AppColors.textPrimary),
+                  onPressed: () {},
                 ),
               ],
             ),
@@ -156,18 +148,37 @@ class _ChatsTab extends StatelessWidget {
               ),
               child: const TextField(
                 decoration: InputDecoration(
-                  hintText: 'Search chats...',
+                  hintText: 'Search chats, contacts...',
                   hintStyle: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
                   ),
                   prefixIcon: Icon(Icons.search,
                       color: AppColors.textSecondary),
+                  suffixIcon: Icon(Icons.tune,
+                      color: AppColors.textSecondary),
                   border: InputBorder.none,
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Filter tabs
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                _filterChip('All 12', true),
+                const SizedBox(width: 8),
+                _filterChip('Unread', false),
+                const SizedBox(width: 8),
+                _filterChip('Groups', false),
+                const SizedBox(width: 8),
+                _filterChip('Favorites', false),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -181,16 +192,13 @@ class _ChatsTab extends StatelessWidget {
                         color: AppColors.primary),
                   );
                 }
-
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return _emptyState();
                 }
-
                 final chats = snapshot.data!
                     .where((chat) =>
                         (chat['lastMessage'] ?? '').toString().isNotEmpty)
                     .toList();
-
                 if (chats.isEmpty) return _emptyState();
 
                 return ListView.builder(
@@ -199,7 +207,6 @@ class _ChatsTab extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final chatData = chats[index];
                     final chatId = chatData['chatId'] as String;
-
                     return FutureBuilder<UserModel?>(
                       future: chatService.getOtherUser(chatId),
                       builder: (context, userSnapshot) {
@@ -208,7 +215,8 @@ class _ChatsTab extends StatelessWidget {
                           return const SizedBox.shrink();
                         }
                         final user = userSnapshot.data!;
-                        return _chatTile(context, chatId, chatData, user);
+                        return _chatTile(
+                            context, chatId, chatData, user);
                       },
                     );
                   },
@@ -217,6 +225,24 @@ class _ChatsTab extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, bool selected) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: selected ? AppColors.primary : AppColors.background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : AppColors.textSecondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -259,55 +285,7 @@ class _ChatsTab extends StatelessWidget {
     final lastSender = chatData['lastMessageSender'] ?? '';
     final isMe = lastSender == ChatService().currentUserId;
 
-    return ListTile(
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      leading: _avatar(user, 28),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              user.name,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          Text(
-            _formatTime(chatData['lastMessageTime']),
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Row(
-          children: [
-            if (isMe)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(Icons.done_all,
-                    size: 16, color: AppColors.primary),
-              ),
-            Expanded(
-              child: Text(
-                lastMessage,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return InkWell(
       onTap: () {
         Navigator.push(
           context,
@@ -320,6 +298,68 @@ class _ChatsTab extends StatelessWidget {
           ),
         );
       },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Row(
+          children: [
+            _avatar(user, 28),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          user.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _formatTime(chatData['lastMessageTime']),
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (isMe)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 4),
+                          child: Icon(Icons.done_all,
+                              size: 16, color: AppColors.primary),
+                        ),
+                      Expanded(
+                        child: Text(
+                          lastMessage,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.volume_off,
+                          size: 16, color: AppColors.textSecondary),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -376,16 +416,10 @@ class _ChatsTab extends StatelessWidget {
       final dt = DateTime.parse(timestamp);
       final now = DateTime.now();
       final diff = now.difference(dt);
-
-      if (diff.inDays > 0) {
-        return '${diff.inDays}d';
-      } else if (diff.inHours > 0) {
-        return '${diff.inHours}h';
-      } else if (diff.inMinutes > 0) {
-        return '${diff.inMinutes}m';
-      } else {
-        return 'now';
-      }
+      if (diff.inDays > 0) return '${diff.inDays}d';
+      if (diff.inHours > 0) return '${diff.inHours}h';
+      if (diff.inMinutes > 0) return '${diff.inMinutes}m';
+      return 'now';
     } catch (_) {
       return '';
     }
