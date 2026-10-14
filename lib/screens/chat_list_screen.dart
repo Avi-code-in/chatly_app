@@ -6,8 +6,9 @@ import '../models/user_model.dart';
 import '../theme.dart';
 import 'new_chat_screen.dart';
 import 'chat_screen.dart';
-import 'contacts_screen.dart';
 import 'profile_screen.dart';
+import 'status_screen.dart';
+import 'create_group_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -23,43 +24,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget build(BuildContext context) {
     final pages = [
       const _ChatsTab(),
-      const ContactsScreen(),
-      const Center(child: Text('Status')),
+      const StatusScreen(),
       const ProfileScreen(),
     ];
 
     return Scaffold(
       backgroundColor: AppColors.white,
       body: IndexedStack(index: _currentIndex, children: pages),
-      floatingActionButton: _currentIndex == 0
-          ? Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryLight],
-                ),
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.4),
-                    blurRadius: 15,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.edit, color: Colors.white, size: 24),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const NewChatScreen()),
-                  );
-                },
-              ),
-            )
-          : null,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppColors.white,
@@ -85,8 +56,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
             BottomNavigationBarItem(
                 icon: Icon(Icons.chat_bubble), label: 'Chats'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.people), label: 'Contacts'),
-            BottomNavigationBarItem(
                 icon: Icon(Icons.access_time), label: 'Status'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.person), label: 'Profile'),
@@ -97,8 +66,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 }
 
-class _ChatsTab extends StatelessWidget {
+class _ChatsTab extends StatefulWidget {
   const _ChatsTab();
+
+  @override
+  State<_ChatsTab> createState() => _ChatsTabState();
+}
+
+class _ChatsTabState extends State<_ChatsTab> {
+  int _filterIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -128,17 +104,28 @@ class _ChatsTab extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.search,
                       color: AppColors.textPrimary),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const NewChatScreen()),
+                    );
+                  },
                 ),
                 IconButton(
-                  icon: const Icon(Icons.more_vert,
+                  icon: const Icon(Icons.group_add,
                       color: AppColors.textPrimary),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CreateGroupScreen()),
+                    );
+                  },
                 ),
               ],
             ),
           ),
-          // Search bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Container(
@@ -165,19 +152,18 @@ class _ChatsTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Filter tabs
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                _filterChip('All 12', true),
+                _filterChip('All', 0),
                 const SizedBox(width: 8),
-                _filterChip('Unread', false),
+                _filterChip('Unread', 1),
                 const SizedBox(width: 8),
-                _filterChip('Groups', false),
+                _filterChip('Groups', 2),
                 const SizedBox(width: 8),
-                _filterChip('Favorites', false),
+                _filterChip('Favorites', 3),
               ],
             ),
           ),
@@ -195,10 +181,19 @@ class _ChatsTab extends StatelessWidget {
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return _emptyState();
                 }
-                final chats = snapshot.data!
+
+                var chats = snapshot.data!
                     .where((chat) =>
                         (chat['lastMessage'] ?? '').toString().isNotEmpty)
                     .toList();
+
+                // Filter apply karo
+                if (_filterIndex == 2) {
+                  chats = chats.where((c) => c['isGroup'] == true).toList();
+                } else if (_filterIndex == 0) {
+                  // All
+                }
+
                 if (chats.isEmpty) return _emptyState();
 
                 return ListView.builder(
@@ -207,6 +202,13 @@ class _ChatsTab extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final chatData = chats[index];
                     final chatId = chatData['chatId'] as String;
+                    final isGroup = chatData['isGroup'] == true;
+                    final groupName = chatData['groupName'] ?? 'Group';
+
+                    if (isGroup) {
+                      return _groupTile(context, chatId, chatData, groupName);
+                    }
+
                     return FutureBuilder<UserModel?>(
                       future: chatService.getOtherUser(chatId),
                       builder: (context, userSnapshot) {
@@ -229,19 +231,24 @@ class _ChatsTab extends StatelessWidget {
     );
   }
 
-  Widget _filterChip(String label, bool selected) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.primary : AppColors.background,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: selected ? Colors.white : AppColors.textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
+  Widget _filterChip(String label, int index) {
+    final selected = _filterIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _filterIndex = index),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.background,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : AppColors.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -268,13 +275,74 @@ class _ChatsTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tap the edit button to start a new chat',
+            'Start a new chat or create a group',
             style: TextStyle(
               fontSize: 14,
               color: AppColors.textSecondary,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _groupTile(BuildContext context, String chatId,
+      Map<String, dynamic> chatData, String groupName) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              chatId: chatId,
+              otherUserName: groupName,
+            ),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.primaryLight],
+                ),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: const Icon(Icons.group, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    groupName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    chatData['lastMessage'] ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -368,24 +436,36 @@ class _ChatsTab extends StatelessWidget {
         user.photoUrl!.startsWith('data:image');
     return Stack(
       children: [
-        CircleAvatar(
-          radius: radius,
-          backgroundColor: AppColors.primary.withOpacity(0.15),
-          backgroundImage: hasImage
-              ? MemoryImage(_decodeBase64(user.photoUrl!))
-              : null,
-          child: !hasImage
-              ? Text(
-                  user.name.isNotEmpty
-                      ? user.name[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: radius * 0.7,
-                  ),
-                )
-              : null,
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundImage: hasImage
+                ? MemoryImage(_decodeBase64(user.photoUrl!))
+                : null,
+            child: !hasImage
+                ? Text(
+                    user.name.isNotEmpty
+                        ? user.name[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: radius * 0.7,
+                    ),
+                  )
+                : null,
+          ),
         ),
         if (user.isOnline)
           Positioned(
@@ -398,6 +478,12 @@ class _ChatsTab extends StatelessWidget {
                 color: AppColors.online,
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.online.withOpacity(0.5),
+                    blurRadius: 5,
+                  ),
+                ],
               ),
             ),
           ),

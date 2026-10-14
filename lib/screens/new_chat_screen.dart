@@ -16,25 +16,6 @@ class NewChatScreen extends StatefulWidget {
 class _NewChatScreenState extends State<NewChatScreen> {
   final _searchController = TextEditingController();
   String _query = '';
-  List<UserModel> _contacts = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadContacts();
-  }
-
-  Future<void> _loadContacts() async {
-    final service = ChatService();
-    final contacts = await service.getContactsOnly();
-    if (mounted) {
-      setState(() {
-        _contacts = contacts;
-        _loading = false;
-      });
-    }
-  }
 
   @override
   void dispose() {
@@ -45,10 +26,6 @@ class _NewChatScreenState extends State<NewChatScreen> {
   @override
   Widget build(BuildContext context) {
     final service = ChatService();
-    final filtered = _contacts.where((u) {
-      return u.name.toLowerCase().contains(_query) ||
-          u.phone.contains(_query);
-    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -63,106 +40,127 @@ class _NewChatScreenState extends State<NewChatScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() => _query = v.toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search contacts...',
-                prefixIcon: const Icon(Icons.search,
-                    color: AppColors.textSecondary),
-                filled: true,
-                fillColor: AppColors.background,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (v) => setState(() => _query = v.toLowerCase()),
+                decoration: const InputDecoration(
+                  hintText: 'Search users...',
+                  hintStyle: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                  prefixIcon:
+                      Icon(Icons.search, color: AppColors.textSecondary),
+                  border: InputBorder.none,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 16),
               ),
             ),
           ),
           Expanded(
-            child: _loading
-                ? const Center(
+            child: StreamBuilder<List<UserModel>>(
+              stream: service.getUsers(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
                     child: CircularProgressIndicator(
-                        color: AppColors.primary))
-                : filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.people_outline,
-                              size: 80,
-                              color: AppColors.textSecondary
-                                  .withOpacity(0.5),
-                            ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              'No contacts found',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'App users with your contacts will appear here',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+                        color: AppColors.primary),
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return _emptyState();
+                }
+                final users = snapshot.data!.where((u) {
+                  return u.name.toLowerCase().contains(_query) ||
+                      u.email.toLowerCase().contains(_query);
+                }).toList();
+                if (users.isEmpty) return _emptyState();
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 6),
+                      leading: _avatar(user, 26),
+                      title: Text(
+                        user.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final user = filtered[index];
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 6),
-                            leading: _avatar(user, 26),
-                            title: Text(
-                              user.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              user.isOnline ? 'Online' : 'Offline',
-                              style: TextStyle(
-                                color: user.isOnline
-                                    ? Colors.green
-                                    : AppColors.textSecondary,
-                                fontSize: 13,
-                              ),
-                            ),
-                            onTap: () async {
-                              final chatId = await service
-                                  .createOrGetChatRoom(user.uid);
-                              if (context.mounted) {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ChatScreen(
-                                      chatId: chatId,
-                                      otherUserName: user.name,
-                                      otherUserPhoto: user.photoUrl,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                          );
-                        },
                       ),
+                      subtitle: Text(
+                        user.isOnline ? 'Online' : 'Offline',
+                        style: TextStyle(
+                          color: user.isOnline
+                              ? AppColors.online
+                              : AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                      onTap: () async {
+                        final chatId =
+                            await service.createOrGetChatRoom(user.uid);
+                        if (context.mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                chatId: chatId,
+                                otherUserName: user.name,
+                                otherUserPhoto: user.photoUrl,
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.people_outline,
+            size: 80,
+            color: AppColors.textSecondary.withOpacity(0.5),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'No users found',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Registered users will appear here',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -201,7 +199,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
               width: radius * 0.5,
               height: radius * 0.5,
               decoration: BoxDecoration(
-                color: Colors.green,
+                color: AppColors.online,
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.white, width: 2),
               ),

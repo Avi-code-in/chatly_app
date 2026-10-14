@@ -1,14 +1,18 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:uuid/uuid.dart';
 import '../models/user_model.dart';
 import '../models/message_model.dart';
+import '../models/group_model.dart';
+import '../models/status_model.dart';
 
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final _uuid = const Uuid();
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
@@ -88,12 +92,14 @@ class ChatService {
     return UserModel.fromMap(doc.data()!);
   }
 
+  // ============ CHATS ============
   Future<String> createOrGetChatRoom(String otherUserId) async {
     final chatId = _generateChatId(currentUserId, otherUserId);
     final doc = await _firestore.collection('chats').doc(chatId).get();
     if (!doc.exists) {
       await _firestore.collection('chats').doc(chatId).set({
         'participants': [currentUserId, otherUserId],
+        'isGroup': false,
         'lastMessage': '',
         'lastMessageTime': DateTime.now().toIso8601String(),
         'lastMessageSender': '',
@@ -128,6 +134,115 @@ class ChatService {
     });
   }
 
+  Stream<List<Map<String, dynamic>>> getGroupChats() {
+    return getChats().map((chats) =>
+        chats.where((c) => c['isGroup'] == true).toList());
+  }
+
+  Stream<List<Map<String, dynamic>>> getDirectChats() {
+    return getChats().map((chats) =>
+        chats.where((c) => c['isGroup'] != true).toList());
+  }
+
+  // ============ GROUPS ============
+  Future<String> createGroup(
+      String name, List<String> members, {String? photoUrl}) async {
+    final groupId = _uuid.v4();
+    final allMembers = [currentUserId, ...members];
+
+    final user = await getCurrentUser().first;
+
+    await _firestore.collection('groups').doc(groupId).set({
+      'id': groupId,
+      'name': name,
+      'photoUrl': photoUrl,
+      'members': allMembers,
+      'createdBy': currentUserId,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+
+    // Chat room bhi banao group ke liye
+    await _firestore.collection('chats').doc('group_$groupId').set({
+      'participants': allMembers,
+      'isGroup': true,
+      'groupName': name,
+      'groupPhoto': photoUrl,
+      'lastMessage': 'Group created by ${user?.name ?? "Someone"}',
+      'lastMessageTime': DateTime.now().toIso8601String(),
+      'lastMessageSender': currentUserId,
+    });
+
+    return 'group_$groupId';
+  }
+
+  Stream<List<GroupModel>> getGroups() {
+    return _firestore
+        .collection('groups')
+        .where('members', arrayContains: currentUserId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => GroupModel.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  // ============ STATUS ============
+  Future<void> uploadTextStatus(String text) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'text',
+      'text': text,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  Future<void> uploadImageStatus(String base64Image) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'image',
+      'text': '',
+      'imageData': base64Image,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  Stream<List<StatusModel>> getStatuses() {
+    return _firestore
+        .collection('statuses')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => StatusModel.fromMap(doc.data(), doc.id))
+            .where((s) => !s.isExpired)
+            .toList());
+  }
+
+  Future<void> markStatusViewed(String statusId) async {
+    await _firestore.collection('statuses').doc(statusId).update({
+      'viewers': FieldValue.arrayUnion([currentUserId]),
+    });
+  }
+
+  // ============ MESSAGES ============
   Future<void> sendMessage(String chatId, String text) async {
     if (text.trim().isEmpty) return;
     await _sendMessageData(chatId, {
@@ -152,15 +267,39 @@ class ChatService {
 
   Future<void> sendFileMessage(
       String chatId, String fileName, String base64File) async {
-    await _sendMessageData(chatId, {
-      'senderId': currentUserId,
-      'text': '',
-      'type': 'file',
-      'fileName': fileName,
-      'fileData': base64File,
-      'timestamp': DateTime.now().toIso8601String(),
-      'seen': false,
-    }, '📎 $fileName');
+    final lower = fileName.toLowerCase();
+    final isImage = lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.bmp');
+
+    if (isImage) {
+      String ext = 'jpeg';
+      if (lower.endsWith('.png')) ext = 'png';
+      if (lower.endsWith('.gif')) ext = 'gif';
+      if (lower.endsWith('.webp')) ext = 'webp';
+
+      await _sendMessageData(chatId, {
+        'senderId': currentUserId,
+        'text': '',
+        'type': 'image',
+        'imageData': 'data:image/$ext;base64,$base64File',
+        'timestamp': DateTime.now().toIso8601String(),
+        'seen': false,
+      }, '📷 Photo');
+    } else {
+      await _sendMessageData(chatId, {
+        'senderId': currentUserId,
+        'text': '',
+        'type': 'file',
+        'fileName': fileName,
+        'fileData': base64File,
+        'timestamp': DateTime.now().toIso8601String(),
+        'seen': false,
+      }, '📎 $fileName');
+    }
   }
 
   Future<void> _sendMessageData(String chatId,
@@ -235,55 +374,5 @@ class ChatService {
   Future<void> signOut() async {
     await updateOnlineStatus(false);
     await _auth.signOut();
-  }
-
-  // Contacts only
-  Future<List<UserModel>> getContactsOnly() async {
-    final uid = currentUserId;
-    if (uid.isEmpty) return [];
-
-    try {
-      final status = await FlutterContacts.permissions.request(PermissionType.read);
-      if (status != PermissionStatus.granted) return [];
-
-      final contacts = await FlutterContacts.getAll(
-        properties: {ContactProperty.name, ContactProperty.phone},
-      );
-
-      final phoneNumbers = <String>[];
-      for (var c in contacts) {
-        for (var p in c.phones) {
-          final cleaned = p.number.replaceAll(RegExp(r'[^\d]'), '');
-          if (cleaned.length >= 10) {
-            phoneNumbers.add(cleaned.substring(cleaned.length - 10));
-          }
-        }
-      }
-
-      if (phoneNumbers.isEmpty) return [];
-
-      final usersSnapshot = await _firestore.collection('users').get();
-
-      final matchedUsers = <UserModel>[];
-      for (var doc in usersSnapshot.docs) {
-        final data = doc.data();
-        final userPhone = (data['phone'] ?? '').toString();
-        final cleaned = userPhone.replaceAll(RegExp(r'[^\d]'), '');
-        final last10 = cleaned.length >= 10
-            ? cleaned.substring(cleaned.length - 10)
-            : cleaned;
-
-        if (last10.isNotEmpty &&
-            phoneNumbers.contains(last10) &&
-            data['uid'] != uid) {
-          matchedUsers.add(UserModel.fromMap(data));
-        }
-      }
-
-      return matchedUsers;
-    } catch (e) {
-      debugPrint('Contacts error: $e');
-      return [];
-    }
   }
 }

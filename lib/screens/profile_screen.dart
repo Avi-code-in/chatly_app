@@ -69,47 +69,64 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 55,
-                    backgroundColor: AppColors.primary.withOpacity(0.15),
-                    backgroundImage: hasImage
-                        ? MemoryImage(_decodeBase64(user.photoUrl!))
-                        : null,
-                    child: !hasImage
-                        ? Text(
-                            user.name.isNotEmpty
-                                ? user.name[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 42,
-                            ),
-                          )
-                        : null,
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: () => _pickImage(context, service),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
+              GestureDetector(
+                onTap: () {
+                  if (hasImage) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => Dialog(
+                        backgroundColor: Colors.transparent,
+                        child: InteractiveViewer(
+                          child: Image.memory(
+                              _decodeBase64(user.photoUrl!)),
                         ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 18,
+                      ),
+                    );
+                  }
+                },
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 55,
+                      backgroundColor:
+                          AppColors.primary.withOpacity(0.15),
+                      backgroundImage: hasImage
+                          ? MemoryImage(_decodeBase64(user.photoUrl!))
+                          : null,
+                      child: !hasImage
+                          ? Text(
+                              user.name.isNotEmpty
+                                  ? user.name[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 42,
+                              ),
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onTap: () => _pickImage(context, service),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -122,7 +139,7 @@ class ProfileScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                user.phone.isNotEmpty ? user.phone : user.email,
+                user.email.isNotEmpty ? user.email : 'No email',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
@@ -164,15 +181,34 @@ class ProfileScreen extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _menuItem(Icons.info_outline, 'About', 'Good vibes only ✨',
-            () {}),
-        _menuItem(Icons.person_outline, 'Account',
-            'Phone, email, privacy', () {}),
-        _menuItem(Icons.notifications_outlined, 'Notifications',
-            'Messages, calls, groups', () {}),
-        _menuItem(Icons.storage_outlined, 'Storage & Data',
-            'Network usage, media auto-download', () {}),
-        _menuItem(Icons.help_outline, 'Help & Support', 'FAQ, contact us',
-            () {}),
+            () => _showDialog(context, 'About',
+                'Chatly v1.0.0\n\nSimple. Fast. Connected.\n\nMade with ❤️')),
+        _menuItem(
+            Icons.person_outline,
+            'Account',
+            'Phone, email, privacy',
+            () => _showDialog(
+                context,
+                'Account',
+                'Name: ${user.name}\n\nEmail: ${user.email}\n\nPrivacy: Your data is safe with us.')),
+        _menuItem(
+            Icons.notifications_outlined,
+            'Notifications',
+            'Messages, calls, groups',
+            () => _showDialog(context, 'Notifications',
+                'Notification settings coming soon!')),
+        _menuItem(
+            Icons.storage_outlined,
+            'Storage & Data',
+            'Network usage, media auto-download',
+            () => _showDialog(context, 'Storage & Data',
+                'Storage management coming soon!')),
+        _menuItem(
+            Icons.help_outline,
+            'Help & Support',
+            'FAQ, contact us',
+            () => _showDialog(context, 'Help & Support',
+                'Need help?\n\nEmail: avirup@chatly.com')),
         const SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -204,6 +240,22 @@ class ProfileScreen extends StatelessWidget {
         ),
         const SizedBox(height: 20),
       ],
+    );
+  }
+
+  void _showDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 

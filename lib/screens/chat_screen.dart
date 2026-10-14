@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/chat_service.dart';
 import '../models/message_model.dart';
+import '../models/user_model.dart';
 import '../theme.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -29,11 +32,46 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _chatService = ChatService();
   bool _showEmoji = false;
+  bool _isGroupChat = false;
+  List<String> _groupMembers = [];
+  Map<String, String> _memberNames = {};
 
   @override
   void initState() {
     super.initState();
+    _isGroupChat = widget.chatId.startsWith('group_');
     _chatService.markMessagesAsSeen(widget.chatId);
+    if (_isGroupChat) {
+      _loadGroupMembers();
+    }
+  }
+
+  Future<void> _loadGroupMembers() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .get();
+      if (doc.exists) {
+        final members =
+            List<String>.from(doc.data()?['participants'] ?? []);
+        final names = <String, String>{};
+        for (var id in members) {
+          final user = await _chatService.getUserById(id);
+          if (user != null) {
+            names[id] = user.name;
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _groupMembers = members;
+            _memberNames = names;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading group members: $e');
+    }
   }
 
   @override
@@ -75,6 +113,133 @@ class _ChatScreenState extends State<ChatScreen> {
         widget.chatId, file.name, base64File);
   }
 
+  void _showProfilePicture() {
+    final photo = widget.otherUserPhoto;
+    if (photo == null || !photo.startsWith('data:image')) return;
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: InteractiveViewer(
+                child: Image.memory(_decodeBase64(photo)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.otherUserName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showGroupInfo() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.primaryLight],
+                ),
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: const Icon(Icons.group,
+                  color: Colors.white, size: 40),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              widget.otherUserName,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            Text(
+              'Group · ${_groupMembers.length} members',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Members',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ..._groupMembers.map((id) {
+              final name = _memberNames[id] ?? 'User';
+              final isMe = id == _chatService.currentUserId;
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  isMe ? '$name (You)' : name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showMessageOptions(MessageModel msg, bool isMe) {
     showModalBottomSheet(
       context: context,
@@ -114,7 +279,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 leading: const Icon(Icons.share,
                     color: AppColors.textPrimary),
                 title: const Text('Share'),
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  Navigator.pop(context);
+                  final shareText =
+                      msg.text.isNotEmpty ? msg.text : 'Shared from Chatly';
+                  Share.share(shareText);
+                },
               ),
               if (isMe)
                 ListTile(
@@ -145,59 +315,95 @@ class _ChatScreenState extends State<ChatScreen> {
         titleSpacing: 0,
         title: Row(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: AppColors.primary.withOpacity(0.15),
-              backgroundImage: hasImage
-                  ? MemoryImage(_decodeBase64(widget.otherUserPhoto!))
-                  : null,
-              child: !hasImage
-                  ? Text(
-                      widget.otherUserName.isNotEmpty
-                          ? widget.otherUserName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+            GestureDetector(
+              onTap: _isGroupChat ? _showGroupInfo : _showProfilePicture,
+              child: _isGroupChat
+                  ? Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            AppColors.primary,
+                            AppColors.primaryLight
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
                       ),
+                      child: const Icon(Icons.group,
+                          color: Colors.white, size: 22),
                     )
-                  : null,
+                  : CircleAvatar(
+                      radius: 20,
+                      backgroundColor:
+                          AppColors.primary.withOpacity(0.15),
+                      backgroundImage: hasImage
+                          ? MemoryImage(
+                              _decodeBase64(widget.otherUserPhoto!))
+                          : null,
+                      child: !hasImage
+                          ? Text(
+                              widget.otherUserName.isNotEmpty
+                                  ? widget.otherUserName[0]
+                                      .toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            )
+                          : null,
+                    ),
             ),
             const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.otherUserName,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.otherUserName,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const Text(
-                  'Online',
-                  style: TextStyle(color: AppColors.online, fontSize: 12),
-                ),
-              ],
+                  Text(
+                    _isGroupChat
+                        ? '${_groupMembers.length} members'
+                        : 'Online',
+                    style: TextStyle(
+                      color: _isGroupChat
+                          ? AppColors.textSecondary
+                          : AppColors.online,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.videocam_outlined,
-                color: AppColors.primary),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.call_outlined, color: AppColors.primary),
-            onPressed: () {},
-          ),
+          if (!_isGroupChat) ...[
+            IconButton(
+              icon: const Icon(Icons.videocam_outlined,
+                  color: AppColors.primary),
+              onPressed: () {},
+            ),
+            IconButton(
+              icon: const Icon(Icons.call_outlined,
+                  color: AppColors.primary),
+              onPressed: () {},
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.more_vert,
                 color: AppColors.textPrimary),
-            onPressed: () {},
+            onPressed: _isGroupChat ? _showGroupInfo : () {},
           ),
         ],
       ),
@@ -288,7 +494,12 @@ class _ChatScreenState extends State<ChatScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primary.withOpacity(0.15),
+                          AppColors.primaryLight.withOpacity(0.1),
+                        ],
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -354,8 +565,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
-                          blurRadius: 8,
+                          color: AppColors.primary.withOpacity(0.4),
+                          blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
                       ],
@@ -376,6 +587,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(MessageModel msg, bool isMe) {
+    // Group chat mein sender ka naam dikhao
+    final senderName = _isGroupChat ? (_memberNames[msg.senderId] ?? '') : '';
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -394,18 +608,54 @@ class _ChatScreenState extends State<ChatScreen> {
             bottomRight:
                 isMe ? const Radius.circular(4) : const Radius.circular(20),
           ),
+          boxShadow: isMe
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
         child: Column(
           crossAxisAlignment:
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
+            // Group mein sender name dikhao
+            if (_isGroupChat && !isMe && senderName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  senderName,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
             if (msg.type == 'image' && msg.imageData != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(
-                  _decodeBase64(msg.imageData!),
-                  width: 200,
-                  fit: BoxFit.cover,
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      backgroundColor: Colors.transparent,
+                      insetPadding: const EdgeInsets.all(10),
+                      child: InteractiveViewer(
+                        child: Image.memory(_decodeBase64(msg.imageData!)),
+                      ),
+                    ),
+                  );
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    _decodeBase64(msg.imageData!),
+                    width: 200,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               )
             else if (msg.type == 'file' && msg.fileName != null)

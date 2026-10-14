@@ -86,7 +86,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final existingUser = await _chatService.getUserById(uid);
       if (existingUser == null) {
         await _chatService.createUserIfNotExists(
-            userCredential.user!.displayName ?? "User", uid);
+            userCredential.user!.displayName ?? 'User', uid);
       } else {
         await _chatService.updateOnlineStatus(true);
       }
@@ -97,7 +97,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
     } catch (e) {
-      setState(() => _error = "Google sign-in failed: $e");
+      setState(() => _error = 'Google sign-in failed');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -106,16 +106,16 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           // Background gradient orbs
           Positioned(
-            top: -80,
-            right: -80,
+            top: -100,
+            right: -100,
             child: Container(
-              width: 250,
-              height: 250,
+              width: 300,
+              height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -128,11 +128,11 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
           Positioned(
-            bottom: 100,
-            left: -60,
+            top: 200,
+            left: -100,
             child: Container(
-              width: 200,
-              height: 200,
+              width: 250,
+              height: 250,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -150,14 +150,14 @@ class _AuthScreenState extends State<AuthScreen> {
             left: 0,
             right: 0,
             child: Container(
-              height: 150,
+              height: 180,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
                     AppColors.primary.withOpacity(0.02),
-                    AppColors.primary.withOpacity(0.1),
+                    AppColors.primary.withOpacity(0.12),
                   ],
                 ),
                 borderRadius: const BorderRadius.only(
@@ -173,71 +173,124 @@ class _AuthScreenState extends State<AuthScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 40),
 
-                  // Logo with 3D effect
+                  // 3D Logo
                   Center(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 110,
-                          height: 110,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF7B6CFF), Color(0xFF5B4DFF)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withOpacity(0.35),
-                                blurRadius: 30,
-                                offset: const Offset(0, 12),
+                    child: SizedBox(
+                      width: 130,
+                      height: 130,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Shadow
+                          Positioned(
+                            bottom: 0,
+                            child: Container(
+                              width: 90,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(50),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        AppColors.primary.withOpacity(0.4),
+                                    blurRadius: 25,
+                                    spreadRadius: 5,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.chat_bubble,
-                            color: Colors.white,
-                            size: 55,
-                          ),
-                        ),
-                        Positioned(
-                          right: 20,
-                          top: 20,
-                          child: Container(
-                            width: 25,
-                            height: 25,
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryLight.withOpacity(0.6),
-                              shape: BoxShape.circle,
                             ),
                           ),
-                        ),
-                      ],
+                          // Main bubble
+                          Positioned(
+                            top: 10,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF8B7CFF),
+                                    Color(0xFF5B4DFF),
+                                    Color(0xFF4A3DE8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(32),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        AppColors.primary.withOpacity(0.5),
+                                    blurRadius: 30,
+                                    offset: const Offset(0, 15),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.chat_bubble,
+                                color: Colors.white,
+                                size: 50,
+                              ),
+                            ),
+                          ),
+                          // Small overlay bubble
+                          Positioned(
+                            right: 5,
+                            bottom: 20,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFB8AEFF),
+                                    Color(0xFF8B7CFF),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        AppColors.primary.withOpacity(0.3),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.circle,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   const Center(
                     child: Text(
                       'Chatly',
                       style: TextStyle(
-                        fontSize: 40,
+                        fontSize: 42,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
-                        letterSpacing: -1,
+                        letterSpacing: -1.5,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   const Center(
                     child: Text(
                       'Connect. Chat. Be Closer.',
                       style: TextStyle(
                         fontSize: 15,
                         color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -251,128 +304,44 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 40),
 
-                  // 3D Illustration
-                  Center(
-                    child: SizedBox(
-                      height: 120,
-                      width: 200,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Positioned(
-                            left: 10,
-                            child: Container(
-                              width: 100,
-                              height: 75,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF7B6CFF), Color(0xFF5B4DFF)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(30),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withOpacity(0.3),
-                                    blurRadius: 15,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(Icons.chat_bubble,
-                                  color: Colors.white, size: 35),
-                            ),
-                          ),
-                          Positioned(
-                            right: 20,
-                            top: 30,
-                            child: Container(
-                              width: 70,
-                              height: 55,
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                borderRadius: BorderRadius.circular(25),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(Icons.chat_bubble,
-                                  color: AppColors.primary.withOpacity(0.5),
-                                  size: 25),
-                            ),
-                          ),
-                        ],
-                      ),
+                  if (!_isLogin) ...[
+                    _inputField(
+                      controller: _nameController,
+                      hint: 'Your name',
+                      icon: Icons.person_outline,
                     ),
-                  ),
-                  const SizedBox(height: 30),
+                    const SizedBox(height: 16),
+                  ],
 
-                  // Phone/Email field
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        hintText: 'Phone Number / Email',
-                        hintStyle: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 15,
-                        ),
-                        prefixIcon: Icon(Icons.person_outline,
-                            color: AppColors.textSecondary),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 18),
-                      ),
-                    ),
+                  _inputField(
+                    controller: _emailController,
+                    hint: 'Phone Number / Email',
+                    icon: Icons.person_outline,
+                    keyboard: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
 
-                  // Password field
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        hintText: 'Password',
-                        hintStyle: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 15,
-                        ),
-                        prefixIcon: const Icon(Icons.lock_outline,
-                            color: AppColors.textSecondary),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: AppColors.textSecondary,
-                          ),
-                          onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 18),
+                  _inputField(
+                    controller: _passwordController,
+                    hint: 'Password',
+                    icon: Icons.lock_outline,
+                    obscure: _obscurePassword,
+                    suffix: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: AppColors.textSecondary,
+                        size: 20,
                       ),
+                      onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword),
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
@@ -397,9 +366,12 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ],
 
-                  const SizedBox(height: 16),
-                  _primaryButton('Login', _submit),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
+                  _primaryButton(
+                    _isLogin ? 'Login' : 'Create Account',
+                    _submit,
+                  ),
+                  const SizedBox(height: 24),
 
                   Row(
                     children: [
@@ -414,17 +386,19 @@ class _AuthScreenState extends State<AuthScreen> {
                       Expanded(child: Divider(color: Colors.grey[300])),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
                   _googleButton(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        "Don't have an account? ",
-                        style: TextStyle(
+                      Text(
+                        _isLogin
+                            ? "Don't have an account? "
+                            : "Already have an account? ",
+                        style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 14,
                         ),
@@ -434,9 +408,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           _isLogin = !_isLogin;
                           _error = null;
                         }),
-                        child: const Text(
-                          'Sign Up',
-                          style: TextStyle(
+                        child: Text(
+                          _isLogin ? 'Sign Up' : 'Login',
+                          style: const TextStyle(
                             color: AppColors.primary,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -444,6 +418,17 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Center(
+                    child: Text(
+                      'By continuing, you agree to our\nTerms of Service & Privacy Policy',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -454,21 +439,61 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Widget _inputField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool obscure = false,
+    TextInputType? keyboard,
+    Widget? suffix,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        keyboardType: keyboard,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 15,
+          ),
+          prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 22),
+          suffixIcon: suffix,
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        ),
+      ),
+    );
+  }
+
   Widget _primaryButton(String text, VoidCallback onPressed) {
     return Container(
-      height: 56,
+      height: 58,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF5B4DFF), Color(0xFF7B6CFF)],
+          colors: [Color(0xFF5B4DFF), Color(0xFF8B7CFF)],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.35),
+            color: AppColors.primary.withOpacity(0.4),
             blurRadius: 20,
-            offset: const Offset(0, 8),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -493,7 +518,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward, size: 20),
+                  const Icon(Icons.arrow_forward_rounded, size: 20),
                 ],
               ),
       ),
@@ -504,9 +529,16 @@ class _AuthScreenState extends State<AuthScreen> {
     return Container(
       height: 56,
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey[300]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ElevatedButton(
         onPressed: _loading ? null : _googleSignIn,
@@ -521,12 +553,22 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'G',
-              style: TextStyle(
-                color: Color(0xFF4285F4),
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Center(
+                child: Text(
+                  'G',
+                  style: TextStyle(
+                    color: Color(0xFF4285F4),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 12),
