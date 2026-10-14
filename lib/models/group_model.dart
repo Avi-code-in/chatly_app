@@ -3,6 +3,7 @@ class GroupModel {
   final String name;
   final String? photoUrl;
   final List<String> members;
+  final List<String> admins;
   final String createdBy;
   final DateTime createdAt;
 
@@ -11,6 +12,7 @@ class GroupModel {
     required this.name,
     this.photoUrl,
     required this.members,
+    this.admins = const [],
     required this.createdBy,
     required this.createdAt,
   });
@@ -21,6 +23,7 @@ class GroupModel {
       'name': name,
       'photoUrl': photoUrl,
       'members': members,
+      'admins': admins,
       'createdBy': createdBy,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -32,9 +35,9 @@ class GroupModel {
       name: map['name'] ?? '',
       photoUrl: map['photoUrl'],
       members: List<String>.from(map['members'] ?? []),
+      admins: List<String>.from(map['admins'] ?? []),
       createdBy: map['createdBy'] ?? '',
-      createdAt:
-          DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
 }

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -44,9 +43,7 @@ class ChatService {
     try {
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
-        await _firestore.collection('users').doc(uid).update({
-          'fcmToken': token,
-        });
+        await _firestore.collection('users').doc(uid).update({'fcmToken': token});
       }
     } catch (e) {
       debugPrint('FCM token error: $e');
@@ -58,23 +55,13 @@ class ChatService {
         .collection('users')
         .where('uid', isNotEqualTo: currentUserId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => UserModel.fromMap(doc.data()))
-            .toList());
+        .map((snapshot) => snapshot.docs.map((doc) => UserModel.fromMap(doc.data())).toList());
   }
 
-  Future<void> updateProfilePicture(String base64Image) async {
-    final uid = currentUserId;
-    if (uid.isEmpty) return;
-    await _firestore.collection('users').doc(uid).update({
-      'photoUrl': base64Image,
-    });
-  }
-
-  Future<void> updateName(String name) async {
-    final uid = currentUserId;
-    if (uid.isEmpty) return;
-    await _firestore.collection('users').doc(uid).update({'name': name});
+  Future<UserModel?> getUserById(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    if (!doc.exists) return null;
+    return UserModel.fromMap(doc.data()!);
   }
 
   Stream<UserModel?> getCurrentUser() {
@@ -86,10 +73,25 @@ class ChatService {
     });
   }
 
-  Future<UserModel?> getUserById(String uid) async {
-    final doc = await _firestore.collection('users').doc(uid).get();
-    if (!doc.exists) return null;
-    return UserModel.fromMap(doc.data()!);
+  Future<void> updateProfilePicture(String base64Image) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    await _firestore.collection('users').doc(uid).update({'photoUrl': base64Image});
+  }
+
+  Future<void> updateName(String name) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    await _firestore.collection('users').doc(uid).update({'name': name});
+  }
+
+  Future<void> updateOnlineStatus(bool isOnline) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    await _firestore.collection('users').doc(uid).update({
+      'isOnline': isOnline,
+      'lastSeen': DateTime.now().toIso8601String(),
+    });
   }
 
   // ============ CHATS ============
@@ -134,22 +136,19 @@ class ChatService {
     });
   }
 
-  Stream<List<Map<String, dynamic>>> getGroupChats() {
-    return getChats().map((chats) =>
-        chats.where((c) => c['isGroup'] == true).toList());
-  }
-
-  Stream<List<Map<String, dynamic>>> getDirectChats() {
-    return getChats().map((chats) =>
-        chats.where((c) => c['isGroup'] != true).toList());
+  Future<UserModel?> getOtherUser(String chatId) async {
+    final doc = await _firestore.collection('chats').doc(chatId).get();
+    if (!doc.exists) return null;
+    final participants = List<String>.from(doc.data()?['participants'] ?? []);
+    final otherId = participants.firstWhere((id) => id != currentUserId, orElse: () => '');
+    if (otherId.isEmpty) return null;
+    return getUserById(otherId);
   }
 
   // ============ GROUPS ============
-  Future<String> createGroup(
-      String name, List<String> members, {String? photoUrl}) async {
+  Future<String> createGroup(String name, List<String> members, {String? photoUrl}) async {
     final groupId = _uuid.v4();
     final allMembers = [currentUserId, ...members];
-
     final user = await getCurrentUser().first;
 
     await _firestore.collection('groups').doc(groupId).set({
@@ -157,11 +156,11 @@ class ChatService {
       'name': name,
       'photoUrl': photoUrl,
       'members': allMembers,
+      'admins': [currentUserId],
       'createdBy': currentUserId,
       'createdAt': DateTime.now().toIso8601String(),
     });
 
-    // Chat room bhi banao group ke liye
     await _firestore.collection('chats').doc('group_$groupId').set({
       'participants': allMembers,
       'isGroup': true,
@@ -180,9 +179,21 @@ class ChatService {
         .collection('groups')
         .where('members', arrayContains: currentUserId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => GroupModel.fromMap(doc.data(), doc.id))
-            .toList());
+        .map((snapshot) => snapshot.docs.map((doc) => GroupModel.fromMap(doc.data(), doc.id)).toList());
+  }
+
+  Future<void> addMemberToGroup(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'members': FieldValue.arrayUnion([userId]),
+    });
+    await _firestore.collection('chats').doc('group_$groupId').update({
+      'participants': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> updateGroupPhoto(String groupId, String photoUrl) async {
+    await _firestore.collection('groups').doc(groupId).update({'photoUrl': photoUrl});
+    await _firestore.collection('chats').doc('group_$groupId').update({'groupPhoto': photoUrl});
   }
 
   // ============ STATUS ============
@@ -191,7 +202,6 @@ class ChatService {
     if (user == null) return;
     final id = _uuid.v4();
     final now = DateTime.now();
-
     await _firestore.collection('statuses').doc(id).set({
       'id': id,
       'userId': currentUserId,
@@ -205,12 +215,11 @@ class ChatService {
     });
   }
 
-  Future<void> uploadImageStatus(String base64Image) async {
+  Future<void> uploadImageUrlStatus(String url) async {
     final user = await getCurrentUser().first;
     if (user == null) return;
     final id = _uuid.v4();
     final now = DateTime.now();
-
     await _firestore.collection('statuses').doc(id).set({
       'id': id,
       'userId': currentUserId,
@@ -218,7 +227,26 @@ class ChatService {
       'userPhoto': user.photoUrl,
       'type': 'image',
       'text': '',
-      'imageData': base64Image,
+      'imageUrl': url,
+      'timestamp': now.toIso8601String(),
+      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
+      'viewers': [],
+    });
+  }
+
+  Future<void> uploadVideoUrlStatus(String url) async {
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    await _firestore.collection('statuses').doc(id).set({
+      'id': id,
+      'userId': currentUserId,
+      'userName': user.name,
+      'userPhoto': user.photoUrl,
+      'type': 'video',
+      'text': '',
+      'videoUrl': url,
       'timestamp': now.toIso8601String(),
       'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
       'viewers': [],
@@ -236,10 +264,26 @@ class ChatService {
             .toList());
   }
 
+  Stream<List<StatusModel>> getMyStatuses() {
+    return _firestore
+        .collection('statuses')
+        .where('userId', isEqualTo: currentUserId)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => StatusModel.fromMap(doc.data(), doc.id))
+            .where((s) => !s.isExpired)
+            .toList());
+  }
+
   Future<void> markStatusViewed(String statusId) async {
     await _firestore.collection('statuses').doc(statusId).update({
       'viewers': FieldValue.arrayUnion([currentUserId]),
     });
+  }
+
+  Future<void> deleteStatus(String statusId) async {
+    await _firestore.collection('statuses').doc(statusId).delete();
   }
 
   // ============ MESSAGES ============
@@ -254,61 +298,42 @@ class ChatService {
     }, text.trim());
   }
 
-  Future<void> sendImageMessage(String chatId, String base64Image) async {
+  Future<void> sendImageUrlMessage(String chatId, String url) async {
     await _sendMessageData(chatId, {
       'senderId': currentUserId,
       'text': '',
       'type': 'image',
-      'imageData': base64Image,
+      'imageUrl': url,
       'timestamp': DateTime.now().toIso8601String(),
       'seen': false,
     }, '📷 Photo');
   }
 
-  Future<void> sendFileMessage(
-      String chatId, String fileName, String base64File) async {
-    final lower = fileName.toLowerCase();
-    final isImage = lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.gif') ||
-        lower.endsWith('.webp') ||
-        lower.endsWith('.bmp');
-
-    if (isImage) {
-      String ext = 'jpeg';
-      if (lower.endsWith('.png')) ext = 'png';
-      if (lower.endsWith('.gif')) ext = 'gif';
-      if (lower.endsWith('.webp')) ext = 'webp';
-
-      await _sendMessageData(chatId, {
-        'senderId': currentUserId,
-        'text': '',
-        'type': 'image',
-        'imageData': 'data:image/$ext;base64,$base64File',
-        'timestamp': DateTime.now().toIso8601String(),
-        'seen': false,
-      }, '📷 Photo');
-    } else {
-      await _sendMessageData(chatId, {
-        'senderId': currentUserId,
-        'text': '',
-        'type': 'file',
-        'fileName': fileName,
-        'fileData': base64File,
-        'timestamp': DateTime.now().toIso8601String(),
-        'seen': false,
-      }, '📎 $fileName');
-    }
+  Future<void> sendVideoUrlMessage(String chatId, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'video',
+      'videoUrl': url,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '🎥 Video');
   }
 
-  Future<void> _sendMessageData(String chatId,
-      Map<String, dynamic> data, String previewText) async {
-    await _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .add(data);
+  Future<void> sendFileUrlMessage(String chatId, String fileName, String url) async {
+    await _sendMessageData(chatId, {
+      'senderId': currentUserId,
+      'text': '',
+      'type': 'file',
+      'fileName': fileName,
+      'fileData': url,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    }, '📎 $fileName');
+  }
+
+  Future<void> _sendMessageData(String chatId, Map<String, dynamic> data, String previewText) async {
+    await _firestore.collection('chats').doc(chatId).collection('messages').add(data);
     await _firestore.collection('chats').doc(chatId).update({
       'lastMessage': previewText,
       'lastMessageTime': DateTime.now().toIso8601String(),
@@ -323,9 +348,7 @@ class ChatService {
         .collection('messages')
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => MessageModel.fromMap(doc.data(), doc.id))
-            .toList());
+        .map((snapshot) => snapshot.docs.map((doc) => MessageModel.fromMap(doc.data(), doc.id)).toList());
   }
 
   Future<void> markMessagesAsSeen(String chatId) async {
@@ -342,175 +365,16 @@ class ChatService {
   }
 
   Future<void> deleteMessage(String chatId, String messageId) async {
-    await _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .doc(messageId)
-        .delete();
+    await _firestore.collection('chats').doc(chatId).collection('messages').doc(messageId).delete();
   }
 
-  Future<UserModel?> getOtherUser(String chatId) async {
-    final doc = await _firestore.collection('chats').doc(chatId).get();
-    if (!doc.exists) return null;
-    final participants = List<String>.from(doc.data()?['participants'] ?? []);
-    final otherId = participants.firstWhere(
-      (id) => id != currentUserId,
-      orElse: () => '',
-    );
-    if (otherId.isEmpty) return null;
-    return getUserById(otherId);
-  }
-
-  Future<void> updateOnlineStatus(bool isOnline) async {
-    final uid = currentUserId;
-    if (uid.isEmpty) return;
-    await _firestore.collection('users').doc(uid).update({
-      'isOnline': isOnline,
-      'lastSeen': DateTime.now().toIso8601String(),
-    });
-  }
-
-  Future<void> signOut() async {
-    await updateOnlineStatus(false);
-    await _auth.signOut();
-  }
-}
-
-  // Cloudinary URL ke saath image message
-  Future<void> sendImageUrlMessage(String chatId, String url) async {
-    await _sendMessageData(chatId, {
-      'senderId': currentUserId,
-      'text': '',
-      'type': 'image',
-      'imageUrl': url,
-      'timestamp': DateTime.now().toIso8601String(),
-      'seen': false,
-    }, '📷 Photo');
-  }
-
-  // Cloudinary URL ke saath video message
-  Future<void> sendVideoUrlMessage(String chatId, String url) async {
-    await _sendMessageData(chatId, {
-      'senderId': currentUserId,
-      'text': '',
-      'type': 'video',
-      'videoUrl': url,
-      'timestamp': DateTime.now().toIso8601String(),
-      'seen': false,
-    }, '🎥 Video');
-  }
-
-  // Cloudinary URL ke saath image status
-  Future<void> uploadImageUrlStatus(String url) async {
-    final user = await getCurrentUser().first;
-    if (user == null) return;
-    final id = _uuid.v4();
-    final now = DateTime.now();
-    await _firestore.collection('statuses').doc(id).set({
-      'id': id,
-      'userId': currentUserId,
-      'userName': user.name,
-      'userPhoto': user.photoUrl,
-      'type': 'image',
-      'text': '',
-      'imageUrl': url,
-      'timestamp': now.toIso8601String(),
-      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
-      'viewers': [],
-    });
-  }
-
-  // Cloudinary URL ke saath video status
-  Future<void> uploadVideoUrlStatus(String url) async {
-    final user = await getCurrentUser().first;
-    if (user == null) return;
-    final id = _uuid.v4();
-    final now = DateTime.now();
-    await _firestore.collection('statuses').doc(id).set({
-      'id': id,
-      'userId': currentUserId,
-      'userName': user.name,
-      'userPhoto': user.photoUrl,
-      'type': 'video',
-      'text': '',
-      'videoUrl': url,
-      'timestamp': now.toIso8601String(),
-      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
-      'viewers': [],
-    });
-  }
-
-  // Cloudinary URL ke saath image message
-  Future<void> sendImageUrlMessage(String chatId, String url) async {
-    await _sendMessageData(chatId, {
-      'senderId': currentUserId,
-      'text': '',
-      'type': 'image',
-      'imageUrl': url,
-      'timestamp': DateTime.now().toIso8601String(),
-      'seen': false,
-    }, '📷 Photo');
-  }
-
-  // Cloudinary URL ke saath video message
-  Future<void> sendVideoUrlMessage(String chatId, String url) async {
-    await _sendMessageData(chatId, {
-      'senderId': currentUserId,
-      'text': '',
-      'type': 'video',
-      'videoUrl': url,
-      'timestamp': DateTime.now().toIso8601String(),
-      'seen': false,
-    }, '🎥 Video');
-  }
-
-  // Cloudinary URL ke saath image status
-  Future<void> uploadImageUrlStatus(String url) async {
-    final user = await getCurrentUser().first;
-    if (user == null) return;
-    final id = _uuid.v4();
-    final now = DateTime.now();
-    await _firestore.collection('statuses').doc(id).set({
-      'id': id,
-      'userId': currentUserId,
-      'userName': user.name,
-      'userPhoto': user.photoUrl,
-      'type': 'image',
-      'text': '',
-      'imageUrl': url,
-      'timestamp': now.toIso8601String(),
-      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
-      'viewers': [],
-    });
-  }
-
-  // Cloudinary URL ke saath video status
-  Future<void> uploadVideoUrlStatus(String url) async {
-    final user = await getCurrentUser().first;
-    if (user == null) return;
-    final id = _uuid.v4();
-    final now = DateTime.now();
-    await _firestore.collection('statuses').doc(id).set({
-      'id': id,
-      'userId': currentUserId,
-      'userName': user.name,
-      'userPhoto': user.photoUrl,
-      'type': 'video',
-      'text': '',
-      'videoUrl': url,
-      'timestamp': now.toIso8601String(),
-      'expiresAt': now.add(const Duration(hours: 24)).toIso8601String(),
-      'viewers': [],
-    });
-  }
-
-  // Forward Message
   Future<void> forwardMessage(MessageModel msg, List<String> userIds) async {
     for (var uid in userIds) {
       final chatId = await createOrGetChatRoom(uid);
       if (msg.type == 'image' && msg.imageUrl != null) {
         await sendImageUrlMessage(chatId, msg.imageUrl!);
+      } else if (msg.type == 'video' && msg.videoUrl != null) {
+        await sendVideoUrlMessage(chatId, msg.videoUrl!);
       } else if (msg.type == 'file' && msg.fileName != null && msg.fileData != null) {
         await sendFileUrlMessage(chatId, msg.fileName!, msg.fileData!);
       } else {
@@ -519,15 +383,8 @@ class ChatService {
     }
   }
 
-  // File URL message
-  Future<void> sendFileUrlMessage(String chatId, String fileName, String url) async {
-    await _sendMessageData(chatId, {
-      'senderId': currentUserId,
-      'text': '',
-      'type': 'file',
-      'fileName': fileName,
-      'fileData': url, // URL as data
-      'timestamp': DateTime.now().toIso8601String(),
-      'seen': false,
-    }, '📎 $fileName');
+  Future<void> signOut() async {
+    await updateOnlineStatus(false);
+    await _auth.signOut();
   }
+}

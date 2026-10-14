@@ -3,7 +3,7 @@ class StatusModel {
   final String userId;
   final String userName;
   final String? userPhoto;
-  final String type; // text, image, video
+  final String type;
   final String text;
   final String? imageUrl;
   final String? videoUrl;

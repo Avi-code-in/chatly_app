@@ -2,8 +2,7 @@ class MessageModel {
   final String id;
   final String senderId;
   final String text;
-  final String type; // text, image, video, file
-  final String? imageData;
+  final String type;
   final String? imageUrl;
   final String? videoUrl;
   final String? fileName;
@@ -16,7 +15,6 @@ class MessageModel {
     required this.senderId,
     required this.text,
     this.type = 'text',
-    this.imageData,
     this.imageUrl,
     this.videoUrl,
     this.fileName,
@@ -30,7 +28,6 @@ class MessageModel {
       'senderId': senderId,
       'text': text,
       'type': type,
-      'imageData': imageData,
       'imageUrl': imageUrl,
       'videoUrl': videoUrl,
       'fileName': fileName,
@@ -46,7 +43,6 @@ class MessageModel {
       senderId: map['senderId'] ?? '',
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
-      imageData: map['imageData'],
       imageUrl: map['imageUrl'],
       videoUrl: map['videoUrl'],
       fileName: map['fileName'],
