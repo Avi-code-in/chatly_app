@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -527,8 +528,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           backgroundColor: AppColors.white,
                           backgroundImage: hasImage
                               ? (user.photoUrl!.startsWith('data:image')
-                                  ? MemoryImage(_decodeBase64(user.photoUrl!))
-                                  : NetworkImage(user.photoUrl!))
+                                  ? MemoryImage(_decodeBase64(user.photoUrl!)) as ImageProvider
+                                  : NetworkImage(user.photoUrl!) as ImageProvider)
                               : null,
                           child: !hasImage
                               ? Text(

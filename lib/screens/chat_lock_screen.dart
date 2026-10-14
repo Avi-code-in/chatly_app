@@ -30,10 +30,8 @@ class _ChatLockScreenState extends State<ChatLockScreen> {
       }
       final ok = await _auth.authenticate(
         localizedReason: 'Unlock chat',
-        options: const AuthenticationOptions(
-          biometricOnly: false,
-          stickyAuth: true,
-        ),
+        biometricOnly: false,
+        stickyAuth: true,
       );
       if (ok) widget.onUnlock();
     } catch (e) {
@@ -60,19 +58,11 @@ class _ChatLockScreenState extends State<ChatLockScreen> {
               child: const Icon(Icons.lock, color: Colors.white, size: 60),
             ),
             const SizedBox(height: 30),
-            const Text(
-              'Chat is locked',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
+            const Text('Chat is locked',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 8),
-            const Text(
-              'Unlock with fingerprint or PIN',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
+            const Text('Unlock with fingerprint or PIN',
+                style: TextStyle(color: AppColors.textSecondary)),
             const SizedBox(height: 30),
             if (_trying)
               const CircularProgressIndicator(color: AppColors.primary)
@@ -84,8 +74,7 @@ class _ChatLockScreenState extends State<ChatLockScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 30, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
                 ),
               ),
           ],

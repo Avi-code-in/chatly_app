@@ -323,7 +323,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickDocument() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
+    final result = await FilePicker.pickFiles(type: FileType.any);
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     if (file.path == null) return;
