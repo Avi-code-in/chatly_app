@@ -56,22 +56,16 @@ class ChatService {
     }
   }
 
-  // 🔥 Contacts only - naye API ke saath
   Future<List<UserModel>> getContactsOnly() async {
     final uid = currentUserId;
     if (uid.isEmpty) return [];
 
     try {
-      // Permission maango
-      final status = await FlutterContacts.permissions.request(
-        PermissionType.read,
-      );
+      final status = await FlutterContacts.permissions.request(PermissionType.read);
       if (status != PermissionStatus.granted) return [];
 
-      // Contacts uthao
-      final contacts = await FlutterContacts.getContacts(
-        withProperties: true,
-        withPhoto: false,
+      final contacts = await FlutterContacts.getAll(
+        properties: {ContactProperty.name, ContactProperty.phone},
       );
 
       final phoneNumbers = <String>[];
