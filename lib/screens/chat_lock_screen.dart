@@ -30,8 +30,6 @@ class _ChatLockScreenState extends State<ChatLockScreen> {
       }
       final ok = await _auth.authenticate(
         localizedReason: 'Unlock chat',
-        biometricOnly: false,
-        stickyAuth: true,
       );
       if (ok) widget.onUnlock();
     } catch (e) {

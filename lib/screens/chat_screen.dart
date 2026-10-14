@@ -141,12 +141,16 @@ class _ChatScreenState extends State<ChatScreen> {
       final pos = await Geolocator.getCurrentPosition();
       String? address;
       try {
-        final p = await placemarkFromCoordinates(pos.latitude, pos.longitude);
-        if (p.isNotEmpty) {
-          address = '${p.first.street ?? ''}, ${p.first.locality ?? ''}, ${p.first.country ?? ''}'
+        final placemarks = await GeocodingPlatform.instance
+            .placemarkFromCoordinates(pos.latitude, pos.longitude);
+        if (placemarks.isNotEmpty) {
+          final p = placemarks.first;
+          address = '${p.street ?? ''}, ${p.locality ?? ''}, ${p.country ?? ''}'
               .replaceAll(RegExp(r'^[,\s]+'), '');
         }
-      } catch (_) {}
+      } catch (e) {
+        print('Geocoding error: $e');
+      }
 
       await _chatService.sendLocationMessage(
         widget.chatId,
@@ -324,8 +328,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickDocument() async {
     final result = await FilePicker.pickFiles(type: FileType.any);
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
+    if (result == null || result.isEmpty) return;
+    final file = result.first;
     if (file.path == null) return;
     _uploadAndSend(file.path!, 'file');
   }
