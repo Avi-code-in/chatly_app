@@ -433,3 +433,653 @@ class ChatService {
     await _auth.signOut();
   }
 }
+
+  // ============ GROUP ADMIN SYSTEM ============
+
+  Future<void> promoteToAdmin(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'admins': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> demoteFromAdmin(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'admins': FieldValue.arrayRemove([userId]),
+    });
+  }
+
+  Future<bool> isAdmin(String groupId) async {
+    final group = await getGroupById(groupId);
+    if (group == null) return false;
+    return group.admins.contains(currentUserId);
+  }
+
+  Future<void> updateGroupName(String groupId, String newName) async {
+    await _firestore.collection('groups').doc(groupId).update({'name': newName});
+    await _firestore.collection('chats').doc('group_$groupId').update({
+      'groupName': newName,
+    });
+  }
+
+  Future<void> updateGroupDescription(String groupId, String description) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'description': description,
+    });
+  }
+
+  // Group settings (who can add members, send messages)
+  Future<void> updateGroupSettings(
+    String groupId, {
+    bool? membersCanAdd,
+    bool? membersCanSend,
+    bool? membersCanEditInfo,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (membersCanAdd != null) updates['membersCanAdd'] = membersCanAdd;
+    if (membersCanSend != null) updates['membersCanSend'] = membersCanSend;
+    if (membersCanEditInfo != null) {
+      updates['membersCanEditInfo'] = membersCanEditInfo;
+    }
+    await _firestore.collection('groups').doc(groupId).update(updates);
+  }
+
+  // Group settings update
+  Future<void> updateGroupSettings(
+    String groupId, {
+    bool? membersCanAdd,
+    bool? membersCanSend,
+    bool? membersCanEditInfo,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (membersCanAdd != null) updates['membersCanAdd'] = membersCanAdd;
+    if (membersCanSend != null) updates['membersCanSend'] = membersCanSend;
+    if (membersCanEditInfo != null) {
+      updates['membersCanEditInfo'] = membersCanEditInfo;
+    }
+    if (updates.isNotEmpty) {
+      await _firestore.collection('groups').doc(groupId).update(updates);
+    }
+  }
+
+  Future<void> updateGroupDescription(String groupId, String description) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'description': description,
+    });
+  }
+
+  Future<void> promoteToAdmin(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'admins': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> demoteFromAdmin(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'admins': FieldValue.arrayRemove([userId]),
+    });
+  }
+
+// ============ REPLY, REACTIONS, STAR ============
+
+extension ChatServiceExtras on ChatService {
+  // Send message with reply
+  Future<void> sendReplyMessage(
+    String chatId,
+    String text, {
+    required String replyToId,
+    required String replyToText,
+    required String replyToSender,
+  }) async {
+    if (text.trim().isEmpty) return;
+    await _firestore.collection('chats').doc(chatId).collection('messages').add({
+      'senderId': _auth.currentUser?.uid ?? '',
+      'text': text.trim(),
+      'type': 'text',
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+      'replyToId': replyToId,
+      'replyToText': replyToText,
+      'replyToSender': replyToSender,
+    });
+    await _firestore.collection('chats').doc(chatId).update({
+      'lastMessage': text.trim(),
+      'lastMessageTime': DateTime.now().toIso8601String(),
+      'lastMessageSender': _auth.currentUser?.uid ?? '',
+    });
+  }
+
+  // Add or update reaction
+  Future<void> addReaction(
+    String chatId,
+    String messageId,
+    String emoji,
+  ) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    if (uid.isEmpty) return;
+
+    final docRef = _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(messageId);
+
+    final doc = await docRef.get();
+    if (!doc.exists) return;
+
+    final reactions =
+        Map<String, dynamic>.from(doc.data()?['reactions'] ?? {});
+
+    // Remove user from all other emojis (WhatsApp: one reaction per user)
+    reactions.forEach((key, value) {
+      final list = List<String>.from(value);
+      list.remove(uid);
+      if (list.isEmpty) {
+        reactions.remove(key);
+      } else {
+        reactions[key] = list;
+      }
+    });
+
+    // Add to new emoji
+    if (reactions[emoji] == null) {
+      reactions[emoji] = [uid];
+    } else {
+      final list = List<String>.from(reactions[emoji]);
+      if (!list.contains(uid)) list.add(uid);
+      reactions[emoji] = list;
+    }
+
+    await docRef.update({'reactions': reactions});
+  }
+
+  // Remove reaction
+  Future<void> removeReaction(String chatId, String messageId) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    if (uid.isEmpty) return;
+
+    final docRef = _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(messageId);
+
+    final doc = await docRef.get();
+    if (!doc.exists) return;
+
+    final reactions =
+        Map<String, dynamic>.from(doc.data()?['reactions'] ?? {});
+
+    reactions.forEach((key, value) {
+      final list = List<String>.from(value);
+      list.remove(uid);
+      if (list.isEmpty) {
+        reactions.remove(key);
+      } else {
+        reactions[key] = list;
+      }
+    });
+
+    await docRef.update({'reactions': reactions});
+  }
+
+  // Toggle star
+  Future<void> toggleStar(String chatId, String messageId) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    if (uid.isEmpty) return;
+
+    final docRef = _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(messageId);
+
+    final doc = await docRef.get();
+    if (!doc.exists) return;
+
+    final starred = List<String>.from(doc.data()?['starredBy'] ?? []);
+    if (starred.contains(uid)) {
+      starred.remove(uid);
+    } else {
+      starred.add(uid);
+    }
+    await docRef.update({'starredBy': starred});
+  }
+
+  // Get starred messages
+  Stream<List<MessageModel>> getStarredMessages(String chatId) {
+    return _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .where('starredBy', arrayContains: _auth.currentUser?.uid ?? '')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MessageModel.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+}
+
+// ============ BATCH 2: VOICE, LOCATION, DISAPPEARING ============
+
+extension ChatServiceBatch2 on ChatService {
+  // Send Voice Message
+  Future<void> sendVoiceMessage(
+    String chatId,
+    String voiceUrl,
+    int duration,
+    String? transcribedText,
+  ) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final data = <String, dynamic>{
+      'senderId': uid,
+      'text': '',
+      'type': 'voice',
+      'voiceUrl': voiceUrl,
+      'voiceDuration': duration,
+      'transcribedText': transcribedText,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    };
+
+    // Check disappearing settings
+    final chatDoc = await _firestore.collection('chats').doc(chatId).get();
+    final disappearingHours = chatDoc.data()?['disappearingHours'] as int?;
+    if (disappearingHours != null) {
+      data['expiresAt'] = DateTime.now()
+          .add(Duration(hours: disappearingHours))
+          .toIso8601String();
+    }
+
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .add(data);
+
+    await _firestore.collection('chats').doc(chatId).update({
+      'lastMessage': '🎤 Voice message',
+      'lastMessageTime': DateTime.now().toIso8601String(),
+      'lastMessageSender': uid,
+    });
+  }
+
+  // Send Location Message
+  Future<void> sendLocationMessage(
+    String chatId,
+    double lat,
+    double lng,
+    String? address, {
+    bool isLive = false,
+    Duration? liveDuration,
+  }) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final data = <String, dynamic>{
+      'senderId': uid,
+      'text': '',
+      'type': 'location',
+      'latitude': lat,
+      'longitude': lng,
+      'locationAddress': address,
+      'isLiveLocation': isLive,
+      'timestamp': DateTime.now().toIso8601String(),
+      'seen': false,
+    };
+
+    if (isLive && liveDuration != null) {
+      data['liveLocationExpiresAt'] = DateTime.now()
+          .add(liveDuration)
+          .toIso8601String();
+    }
+
+    final chatDoc = await _firestore.collection('chats').doc(chatId).get();
+    final disappearingHours = chatDoc.data()?['disappearingHours'] as int?;
+    if (disappearingHours != null) {
+      data['expiresAt'] = DateTime.now()
+          .add(Duration(hours: disappearingHours))
+          .toIso8601String();
+    }
+
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .add(data);
+
+    await _firestore.collection('chats').doc(chatId).update({
+      'lastMessage': isLive ? '📍 Live location' : '📍 Location',
+      'lastMessageTime': DateTime.now().toIso8601String(),
+      'lastMessageSender': uid,
+    });
+  }
+
+  // Update transcribed text
+  Future<void> updateTranscription(
+    String chatId,
+    String messageId,
+    String transcribedText,
+  ) async {
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'transcribedText': transcribedText});
+  }
+
+  // Disappearing messages setting
+  Future<void> setDisappearingMessages(String chatId, int? hours) async {
+    if (hours == null) {
+      await _firestore.collection('chats').doc(chatId).update({
+        'disappearingHours': FieldValue.delete(),
+      });
+    } else {
+      await _firestore.collection('chats').doc(chatId).update({
+        'disappearingHours': hours,
+      });
+    }
+  }
+
+  Stream<int?> getDisappearingHours(String chatId) {
+    return _firestore
+        .collection('chats')
+        .doc(chatId)
+        .snapshots()
+        .map((doc) => doc.data()?['disappearingHours'] as int?);
+  }
+
+  // Delete expired messages (called periodically)
+  Future<void> deleteExpiredMessages(String chatId) async {
+    final now = DateTime.now().toIso8601String();
+    final expired = await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .where('expiresAt', isLessThan: now)
+        .get();
+    for (var doc in expired.docs) {
+      await doc.reference.delete();
+    }
+  }
+}
+
+// ============ BATCH 3: CHAT LOCK, SCHEDULED, QR ============
+
+extension ChatServiceBatch3 on ChatService {
+  // --- Chat Lock ---
+  Future<void> lockChat(String chatId, bool locked) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('locked_chats')
+        .doc(chatId)
+        .set({'locked': locked, 'lockedAt': DateTime.now().toIso8601String()});
+  }
+
+  Stream<bool> isChatLocked(String chatId) {
+    final uid = _auth.currentUser?.uid ?? '';
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('locked_chats')
+        .doc(chatId)
+        .snapshots()
+        .map((doc) => doc.data()?['locked'] ?? false);
+  }
+
+  Future<Set<String>> getLockedChats() async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final snap = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('locked_chats')
+        .where('locked', isEqualTo: true)
+        .get();
+    return snap.docs.map((d) => d.id).toSet();
+  }
+
+  // --- Scheduled Messages ---
+  Future<void> scheduleMessage(
+    String chatId,
+    String text,
+    DateTime scheduledAt,
+  ) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final id = _uuid.v4();
+    await _firestore.collection('scheduled_messages').doc(id).set({
+      'id': id,
+      'chatId': chatId,
+      'senderId': uid,
+      'text': text,
+      'scheduledAt': scheduledAt.toIso8601String(),
+      'isSent': false,
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> getScheduledMessages(String chatId) {
+    final uid = _auth.currentUser?.uid ?? '';
+    return _firestore
+        .collection('scheduled_messages')
+        .where('senderId', isEqualTo: uid)
+        .where('chatId', isEqualTo: chatId)
+        .where('isSent', isEqualTo: false)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList());
+  }
+
+  Future<void> cancelScheduledMessage(String id) async {
+    await _firestore.collection('scheduled_messages').doc(id).delete();
+  }
+
+  // --- QR Chat ---
+  Future<String> generateChatQR(String chatId) async {
+    // Simple payload — just chat id
+    return 'chatly://chat/$chatId';
+  }
+
+  Future<String?> processQRCode(String qrData) async {
+    // Parse qrData
+    if (qrData.startsWith('chatly://chat/')) {
+      return qrData.replaceFirst('chatly://chat/', '');
+    }
+    return null;
+  }
+}
+
+// ============ BATCH 4: BUSINESS FEATURES ============
+
+extension ChatServiceBatch4 on ChatService {
+  // --- Contact Tags ---
+  Future<String> createTag(String name, String color, List<String> userIds) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final id = _uuid.v4();
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('tags')
+        .doc(id)
+        .set({
+      'id': id,
+      'name': name,
+      'color': color,
+      'userIds': userIds,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    return id;
+  }
+
+  Stream<List<Map<String, dynamic>>> getTags() {
+    final uid = _auth.currentUser?.uid ?? '';
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('tags')
+        .snapshots()
+        .map((s) => s.docs.map((d) => d.data()).toList());
+  }
+
+  Future<void> deleteTag(String tagId) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('tags')
+        .doc(tagId)
+        .delete();
+  }
+
+  Future<void> addUserToTag(String tagId, String userId) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('tags')
+        .doc(tagId)
+        .update({
+      'userIds': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> removeUserFromTag(String tagId, String userId) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('tags')
+        .doc(tagId)
+        .update({
+      'userIds': FieldValue.arrayRemove([userId]),
+    });
+  }
+
+  // --- Broadcast Lists ---
+  Future<String> createBroadcast(String name, List<String> receiverIds) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final id = _uuid.v4();
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('broadcasts')
+        .doc(id)
+        .set({
+      'id': id,
+      'name': name,
+      'receiverIds': receiverIds,
+      'lastMessage': '',
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    return id;
+  }
+
+  Stream<List<Map<String, dynamic>>> getBroadcasts() {
+    final uid = _auth.currentUser?.uid ?? '';
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('broadcasts')
+        .snapshots()
+        .map((s) => s.docs.map((d) => d.data()).toList());
+  }
+
+  Future<void> sendBroadcast(String broadcastId, String message) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final doc = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('broadcasts')
+        .doc(broadcastId)
+        .get();
+    if (!doc.exists) return;
+
+    final receiverIds = List<String>.from(doc.data()?['receiverIds'] ?? []);
+    for (var rid in receiverIds) {
+      final chatId = await createOrGetChatRoom(rid);
+      await sendMessage(chatId, message);
+    }
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('broadcasts')
+        .doc(broadcastId)
+        .update({
+      'lastMessage': message,
+      'lastMessageTime': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> deleteBroadcast(String broadcastId) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('broadcasts')
+        .doc(broadcastId)
+        .delete();
+  }
+
+  // --- Auto-Reply ---
+  Future<void> saveAutoReply({
+    required String message,
+    required bool enabled,
+    required bool onlyOutsideHours,
+    required int startHour,
+    required int endHour,
+  }) async {
+    final uid = _auth.currentUser?.uid ?? '';
+    await _firestore.collection('users').doc(uid).update({
+      'autoReply': {
+        'message': message,
+        'enabled': enabled,
+        'onlyOutsideHours': onlyOutsideHours,
+        'startHour': startHour,
+        'endHour': endHour,
+        'updatedAt': DateTime.now().toIso8601String(),
+      }
+    });
+  }
+
+  Stream<Map<String, dynamic>?> getAutoReply() {
+    final uid = _auth.currentUser?.uid ?? '';
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((d) => d.data()?['autoReply'] as Map<String, dynamic>?);
+  }
+
+  // --- Chat Backup (metadata only) ---
+  Future<void> saveBackupMetadata() async {
+    final uid = _auth.currentUser?.uid ?? '';
+    final chats = await _firestore
+        .collection('chats')
+        .where('participants', arrayContains: uid)
+        .get();
+
+    int totalMessages = 0;
+    for (var chat in chats.docs) {
+      final msgs = await _firestore
+          .collection('chats')
+          .doc(chat.id)
+          .collection('messages')
+          .get();
+      totalMessages += msgs.docs.length;
+    }
+
+    await _firestore.collection('users').doc(uid).update({
+      'backup': {
+        'lastBackup': DateTime.now().toIso8601String(),
+        'totalChats': chats.docs.length,
+        'totalMessages': totalMessages,
+      }
+    });
+  }
+
+  Stream<Map<String, dynamic>?> getBackupInfo() {
+    final uid = _auth.currentUser?.uid ?? '';
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((d) => d.data()?['backup'] as Map<String, dynamic>?);
+  }
+}

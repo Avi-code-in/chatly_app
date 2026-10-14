@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:cloudinary_public/cloudinary_public.dart';
 
 class CloudinaryService {
-  // Apna Cloud Name yahan single quotes mein daalo
   static const String _cloudName = 'zu5p2wfv';
   static const String _uploadPreset = 'chatly_uploads';
 
@@ -18,7 +17,7 @@ class CloudinaryService {
       ));
       return response.secureUrl;
     } catch (e) {
-      print('Cloudinary image upload error: $e');
+      print('❌ IMAGE ERROR: $e');
       return null;
     }
   }
@@ -32,7 +31,7 @@ class CloudinaryService {
       ));
       return response.secureUrl;
     } catch (e) {
-      print('Cloudinary video upload error: $e');
+      print('❌ VIDEO ERROR: $e');
       return null;
     }
   }
@@ -46,7 +45,21 @@ class CloudinaryService {
       ));
       return response.secureUrl;
     } catch (e) {
-      print('Cloudinary file upload error: $e');
+      print('❌ FILE ERROR: $e');
+      return null;
+    }
+  }
+
+  Future<String?> uploadVoice(File file) async {
+    try {
+      final response = await _cloudinary.uploadFile(CloudinaryFile.fromFile(
+        file.path,
+        resourceType: CloudinaryResourceType.Video,
+        folder: 'chatly/voice',
+      ));
+      return response.secureUrl;
+    } catch (e) {
+      print('❌ VOICE ERROR: $e');
       return null;
     }
   }
