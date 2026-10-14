@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:video_player/video_player.dart';
 import '../services/chat_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
+import '../models/group_model.dart';
 import '../theme.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -35,6 +37,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showEmoji = false;
 
   bool get isGroupChat => widget.chatId.startsWith('group_');
+  String get groupId => isGroupChat ? widget.chatId.replaceFirst('group_', '') : '';
 
   @override
   void initState() {
@@ -91,11 +94,192 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // Forward Dialog (Point 7)
+  // Group management UI
+  void _showGroupInfo() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) {
+          return FutureBuilder<GroupModel?>(
+            future: _chatService.getGroupById(groupId),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || snapshot.data == null) {
+                return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+              }
+              final group = snapshot.data!;
+              final isAdmin = group.admins.contains(_chatService.currentUserId);
+              return ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Center(
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundColor: AppColors.primary.withOpacity(0.1),
+                          child: const Icon(Icons.group, color: AppColors.primary, size: 40),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(group.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text('${group.members.length} members', style: const TextStyle(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Members', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  ...group.members.map((uid) {
+                    return FutureBuilder<UserModel?>(
+                      future: _chatService.getUserById(uid),
+                      builder: (context, userSnap) {
+                        if (!userSnap.hasData || userSnap.data == null) return const SizedBox.shrink();
+                        final user = userSnap.data!;
+                        final isUserAdmin = group.admins.contains(uid);
+                        return ListTile(
+                          leading: CircleAvatar(child: Text(user.name[0].toUpperCase())),
+                          title: Text(user.name),
+                          subtitle: Text(isUserAdmin ? 'Admin' : 'Member'),
+                          trailing: isAdmin && uid != _chatService.currentUserId
+                              ? IconButton(
+                                  icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                  onPressed: () async {
+                                    await _chatService.removeMemberFromGroup(groupId, uid);
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member removed')));
+                                  },
+                                )
+                              : null,
+                        );
+                      },
+                    );
+                  }).toList(),
+                  const Divider(),
+                  if (isAdmin)
+                    ListTile(
+                      leading: const Icon(Icons.person_add, color: AppColors.primary),
+                      title: const Text('Add Member'),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        _showAddMemberDialog(groupId, group.members);
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.exit_to_app, color: Colors.orange),
+                    title: const Text('Leave Group'),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _chatService.leaveGroup(groupId);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                  ),
+                  if (isAdmin)
+                    ListTile(
+                      leading: const Icon(Icons.delete, color: Colors.red),
+                      title: const Text('Delete Group'),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await _chatService.deleteGroup(groupId);
+                        if (context.mounted) Navigator.pop(context);
+                      },
+                    ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _showAddMemberDialog(String groupId, List<String> currentMembers) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => FutureBuilder<List<UserModel>>(
+        future: _chatService.getUsers().first,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+          final users = snapshot.data!.where((u) => !currentMembers.contains(u.uid)).toList();
+          if (users.isEmpty) return const Center(child: Text('No new users to add'));
+          return ListView.builder(
+            itemCount: users.length,
+            itemBuilder: (context, index) {
+              final user = users[index];
+              return ListTile(
+                leading: CircleAvatar(child: Text(user.name[0].toUpperCase())),
+                title: Text(user.name),
+                onTap: () async {
+                  await _chatService.addMemberToGroup(groupId, user.uid);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member added')));
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _showMessageOptions(MessageModel msg, bool isMe) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            if (msg.type == 'text')
+              ListTile(
+                leading: const Icon(Icons.copy, color: AppColors.textPrimary),
+                title: const Text('Copy'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Clipboard.setData(ClipboardData(text: msg.text));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied')));
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.forward, color: AppColors.textPrimary),
+              title: const Text('Forward'),
+              onTap: () {
+                Navigator.pop(context);
+                _showForwardDialog(msg);
+              },
+            ),
+            if (isMe)
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _chatService.deleteMessage(widget.chatId, msg.id);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showForwardDialog(MessageModel msg) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         Set<String> selectedUsers = {};
@@ -159,60 +343,13 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _showMessageOptions(MessageModel msg, bool isMe) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.background,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            if (msg.type == 'text')
-              ListTile(
-                leading: const Icon(Icons.copy, color: AppColors.textPrimary),
-                title: const Text('Copy'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Clipboard.setData(ClipboardData(text: msg.text));
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied')));
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.forward, color: AppColors.textPrimary),
-              title: const Text('Forward'),
-              onTap: () {
-                Navigator.pop(context);
-                _showForwardDialog(msg);
-              },
-            ),
-            if (isMe)
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete', style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _chatService.deleteMessage(widget.chatId, msg.id);
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final hasImage = widget.otherUserPhoto != null && widget.otherUserPhoto!.startsWith('data:image');
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.white,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
         titleSpacing: 0,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -247,8 +384,12 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.videocam_outlined, color: AppColors.primary), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.call_outlined, color: AppColors.primary), onPressed: () {}),
+          if (!isGroupChat) ...[
+            IconButton(icon: const Icon(Icons.videocam_outlined, color: AppColors.primary), onPressed: () {}),
+            IconButton(icon: const Icon(Icons.call_outlined, color: AppColors.primary), onPressed: () {}),
+          ],
+          if (isGroupChat)
+            IconButton(icon: const Icon(Icons.info_outline, color: AppColors.primary), onPressed: _showGroupInfo),
           IconButton(icon: const Icon(Icons.more_vert, color: AppColors.textPrimary), onPressed: () {}),
         ],
       ),
@@ -355,7 +496,7 @@ class _ChatScreenState extends State<ChatScreen> {
         padding: const EdgeInsets.all(10),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: isMe ? AppColors.primary : AppColors.white,
+          color: isMe ? AppColors.bubbleMe : AppColors.bubbleOther,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),

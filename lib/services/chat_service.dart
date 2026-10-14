@@ -15,6 +15,7 @@ class ChatService {
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
+  // ============ USER ============
   Future<void> createUserIfNotExists(String name, String uid) async {
     if (uid.isEmpty) return;
     final doc = await _firestore.collection('users').doc(uid).get();
@@ -182,12 +183,49 @@ class ChatService {
         .map((snapshot) => snapshot.docs.map((doc) => GroupModel.fromMap(doc.data(), doc.id)).toList());
   }
 
+  Future<GroupModel?> getGroupById(String groupId) async {
+    final doc = await _firestore.collection('groups').doc(groupId).get();
+    if (!doc.exists) return null;
+    return GroupModel.fromMap(doc.data()!, groupId);
+  }
+
   Future<void> addMemberToGroup(String groupId, String userId) async {
     await _firestore.collection('groups').doc(groupId).update({
       'members': FieldValue.arrayUnion([userId]),
     });
     await _firestore.collection('chats').doc('group_$groupId').update({
       'participants': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> removeMemberFromGroup(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'members': FieldValue.arrayRemove([userId]),
+      'admins': FieldValue.arrayRemove([userId]),
+    });
+    await _firestore.collection('chats').doc('group_$groupId').update({
+      'participants': FieldValue.arrayRemove([userId]),
+    });
+  }
+
+  Future<void> leaveGroup(String groupId) async {
+    await removeMemberFromGroup(groupId, currentUserId);
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    await _firestore.collection('groups').doc(groupId).delete();
+    await _firestore.collection('chats').doc('group_$groupId').delete();
+  }
+
+  Future<void> makeAdmin(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'admins': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> removeAdmin(String groupId, String userId) async {
+    await _firestore.collection('groups').doc(groupId).update({
+      'admins': FieldValue.arrayRemove([userId]),
     });
   }
 
@@ -253,27 +291,34 @@ class ChatService {
     });
   }
 
+  // Simplified queries without orderBy to avoid index issues
   Stream<List<StatusModel>> getStatuses() {
     return _firestore
         .collection('statuses')
-        .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => StatusModel.fromMap(doc.data(), doc.id))
-            .where((s) => !s.isExpired)
-            .toList());
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => StatusModel.fromMap(doc.data(), doc.id))
+          .where((s) => !s.isExpired)
+          .toList();
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    });
   }
 
   Stream<List<StatusModel>> getMyStatuses() {
     return _firestore
         .collection('statuses')
         .where('userId', isEqualTo: currentUserId)
-        .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => StatusModel.fromMap(doc.data(), doc.id))
-            .where((s) => !s.isExpired)
-            .toList());
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => StatusModel.fromMap(doc.data(), doc.id))
+          .where((s) => !s.isExpired)
+          .toList();
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    });
   }
 
   Future<void> markStatusViewed(String statusId) async {
