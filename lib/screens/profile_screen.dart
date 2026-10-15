@@ -10,6 +10,9 @@ import '../services/cloudinary_service.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
 import 'auth_screen.dart';
+import 'contact_requests_screen.dart';
+import 'privacy_settings_screen.dart';
+import 'blocked_users_screen.dart';
 import '../widgets/full_screen_image.dart';
 import 'contact_tags_screen.dart';
 import 'broadcast_screen.dart';
@@ -703,6 +706,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Chat Backup',
             'Backup chats and media',
             () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen())),
+          ),
+          _menuItem(
+            Icons.person_add,
+            'Contact Requests',
+            'Accept or decline requests',
+            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactRequestsScreen())),
+          ),
+          _menuItem(
+            Icons.privacy_tip_outlined,
+            'Privacy & Safety',
+            'Who can message, block list',
+            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacySettingsScreen())),
+          ),
+          _menuItem(
+            Icons.block,
+            'Blocked Users',
+            'Manage blocked contacts',
+            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
           ),
           _menuItem(
             Icons.share_outlined,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:country_code_picker/country_code_picker.dart';
 import '../services/chat_service.dart';
 import '../theme.dart';
 import 'chat_list_screen.dart';
@@ -15,118 +14,26 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  // Controllers
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
 
-  // State
-  bool _usePhone = true;
   bool _isLogin = true;
-  bool _codeSent = false;
   bool _loading = false;
-  bool _isNewUser = false;
   bool _obscurePassword = true;
-  String _countryCode = '+91';
   String? _error;
-  String? _verificationId;
 
   final _auth = FirebaseAuth.instance;
   final _chatService = ChatService();
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
     super.dispose();
   }
 
-  // ============ PHONE AUTH ============
-  Future<void> _sendOtp() async {
-    final phone = _phoneController.text.trim();
-    if (phone.length < 10) {
-      setState(() => _error = 'Enter valid phone number');
-      return;
-    }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: '$_countryCode$phone',
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          await _auth.signInWithCredential(credential);
-          if (mounted) _goHome();
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          setState(() {
-            _error = e.message ?? 'Verification failed';
-            _loading = false;
-          });
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          setState(() {
-            _verificationId = verificationId;
-            _codeSent = true;
-            _loading = false;
-          });
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          _verificationId = verificationId;
-        },
-      );
-    } catch (e) {
-      setState(() {
-        _error = 'Phone auth unavailable. Please use email.';
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _verifyOtp() async {
-    final otp = _otpController.text.trim();
-    if (otp.length != 6) {
-      setState(() => _error = 'Enter 6-digit OTP');
-      return;
-    }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId!,
-        smsCode: otp,
-      );
-      final userCred = await _auth.signInWithCredential(credential);
-      final uid = userCred.user!.uid;
-      final existing = await _chatService.getUserById(uid);
-      if (existing == null) {
-        setState(() {
-          _isNewUser = true;
-          _loading = false;
-        });
-        return;
-      }
-      await _chatService.updateOnlineStatus(true);
-      _goHome();
-    } catch (e) {
-      setState(() {
-        _error = 'Invalid OTP';
-        _loading = false;
-      });
-    }
-  }
-
-  // ============ EMAIL AUTH ============
   Future<void> _emailAuth() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -137,6 +44,10 @@ class _AuthScreenState extends State<AuthScreen> {
     }
     if (!_isLogin && _nameController.text.trim().isEmpty) {
       setState(() => _error = 'Please enter your name');
+      return;
+    }
+    if (password.length < 6) {
+      setState(() => _error = 'Password must be at least 6 characters');
       return;
     }
 
@@ -158,9 +69,29 @@ class _AuthScreenState extends State<AuthScreen> {
       }
       _goHome();
     } on FirebaseAuthException catch (e) {
-      setState(() => _error = e.message ?? 'Auth failed');
+      String msg = 'Authentication failed';
+      switch (e.code) {
+        case 'user-not-found':
+          msg = 'No account found with this email';
+          break;
+        case 'wrong-password':
+          msg = 'Incorrect password';
+          break;
+        case 'email-already-in-use':
+          msg = 'This email is already registered';
+          break;
+        case 'invalid-email':
+          msg = 'Please enter a valid email';
+          break;
+        case 'weak-password':
+          msg = 'Password is too weak';
+          break;
+        default:
+          msg = e.message ?? msg;
+      }
+      setState(() => _error = msg);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = 'Something went wrong');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -198,7 +129,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _goHome() async {
     if (!mounted) return;
-    // Check if user has username
     final user = await _chatService.getCurrentUser().first;
     if (!mounted) return;
     if (user == null || user.username.isEmpty) {
@@ -214,7 +144,6 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  // ============ BUILD ============
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -243,7 +172,6 @@ class _AuthScreenState extends State<AuthScreen> {
             child: _orb(240, const Color(0xFFB8D4FF), 0.3),
           ),
 
-          // Main content
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -285,7 +213,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // CHATLY (Chat + ly in blue)
+                  // CHATLY
                   RichText(
                     text: const TextSpan(
                       children: [
@@ -326,11 +254,11 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 48),
 
                   // LOGIN HEADING
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Login',
-                      style: TextStyle(
+                      _isLogin ? 'Login' : 'Sign Up',
+                      style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
                         color: Color(0xFF1A1A2E),
@@ -341,11 +269,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      _usePhone
-                          ? 'Enter your phone number to continue'
-                          : _isLogin
-                              ? 'Enter your email to continue'
-                              : 'Create a new account',
+                      _isLogin
+                          ? 'Enter your email to continue'
+                          : 'Create your Chatly account',
                       style: const TextStyle(
                         fontSize: 15,
                         color: Color(0xFF8F92A1),
@@ -354,18 +280,47 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // FORM
-                  if (_isNewUser)
-                    _buildNameForm()
-                  else if (_usePhone)
-                    _codeSent ? _buildOtpForm() : _buildPhoneForm()
-                  else
-                    _buildEmailForm(),
+                  // Name (signup only)
+                  if (!_isLogin) ...[
+                    _textField(
+                      controller: _nameController,
+                      hint: 'Your name',
+                      icon: Icons.person_outline,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
 
-                  const SizedBox(height: 24),
+                  // Email
+                  _textField(
+                    controller: _emailController,
+                    hint: 'Email',
+                    icon: Icons.email_outlined,
+                    keyboard: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Password
+                  _textField(
+                    controller: _passwordController,
+                    hint: 'Password',
+                    icon: Icons.lock_outline,
+                    obscure: _obscurePassword,
+                    suffix: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: const Color(0xFF8F92A1),
+                        size: 20,
+                      ),
+                      onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
 
                   // Error
-                  if (_error != null)
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -387,32 +342,89 @@ class _AuthScreenState extends State<AuthScreen> {
                         ],
                       ),
                     ),
+                  ],
 
                   const SizedBox(height: 24),
 
-                  // Toggle between phone/email
-                  if (!_codeSent && !_isNewUser)
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _usePhone = !_usePhone;
-                          _error = null;
-                        });
-                      },
-                      child: Text(
-                        _usePhone
-                            ? 'Use email instead'
-                            : 'Use phone number instead',
-                        style: const TextStyle(
-                          color: Color(0xFF2196F3),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
+                  // Primary button
+                  _primaryButton(
+                    _isLogin ? 'Login' : 'Create Account',
+                    _emailAuth,
+                    icon: Icons.arrow_forward,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // OR divider
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: Colors.grey[300])),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('OR',
+                            style: TextStyle(
+                                color: Color(0xFF8F92A1),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      Expanded(child: Divider(color: Colors.grey[300])),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Google
+                  _googleButton(),
+                  const SizedBox(height: 20),
+
+                  // Toggle login/signup
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _isLogin = !_isLogin;
+                      _error = null;
+                    }),
+                    child: Text(
+                      _isLogin
+                          ? "Don't have an account? Sign up"
+                          : "Already have an account? Login",
+                      style: const TextStyle(
+                        color: Color(0xFF2196F3),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
                     ),
+                  ),
 
-                  const SizedBox(height: 20),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // Privacy text
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2196F3).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.lock_outline,
+                          color: Color(0xFF2196F3),
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          "Your data is safe and encrypted. Only your approved contacts can message you.",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF8F92A1),
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -422,7 +434,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  // Decorative orb
   Widget _orb(double size, Color color, double opacity) {
     return Container(
       width: size,
@@ -462,256 +473,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  // ============ FORM BUILDERS ============
-  Widget _buildPhoneForm() {
-    return Column(
-      children: [
-        // Phone input with flag
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF2196F3).withOpacity(0.15),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF2196F3).withOpacity(0.06),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              CountryCodePicker(
-                onChanged: (c) => setState(() {
-                  _countryCode = c.dialCode ?? '+91';
-                }),
-                initialSelection: 'IN',
-                favorite: const ['+91', 'IN'],
-                showCountryOnly: false,
-                showOnlyCountryWhenClosed: false,
-                alignLeft: false,
-                padding: const EdgeInsets.only(left: 8, right: 4),
-                flagWidth: 26,
-                textStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 28,
-                color: Colors.grey[300],
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 10,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'Phone number',
-                    hintStyle: TextStyle(
-                      color: Color(0xFF8F92A1),
-                      fontSize: 15,
-                      fontWeight: FontWeight.normal,
-                      letterSpacing: 0,
-                    ),
-                    counterText: '',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 18),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        _primaryButton(
-          'Continue',
-          _sendOtp,
-          icon: Icons.arrow_forward,
-        ),
-        const SizedBox(height: 24),
-        _privacyText(),
-      ],
-    );
-  }
-
-  Widget _buildOtpForm() {
-    return Column(
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'OTP sent to $_countryCode ${_phoneController.text}',
-            style: const TextStyle(
-              color: Color(0xFF8F92A1),
-              fontSize: 14,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF2196F3).withOpacity(0.15),
-              width: 1.5,
-            ),
-          ),
-          child: TextField(
-            controller: _otpController,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 24,
-              letterSpacing: 12,
-              fontWeight: FontWeight.bold,
-            ),
-            decoration: const InputDecoration(
-              hintText: '------',
-              hintStyle: TextStyle(
-                color: Color(0xFF8F92A1),
-                letterSpacing: 12,
-                fontSize: 24,
-              ),
-              counterText: '',
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 20),
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        _primaryButton('Verify & Login', _verifyOtp),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: () => setState(() {
-            _codeSent = false;
-            _otpController.clear();
-          }),
-          child: const Text('Change phone number'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmailForm() {
-    return Column(
-      children: [
-        if (!_isLogin) ...[
-          _textField(
-            controller: _nameController,
-            hint: 'Your name',
-            icon: Icons.person_outline,
-          ),
-          const SizedBox(height: 14),
-        ],
-        _textField(
-          controller: _emailController,
-          hint: 'Email',
-          icon: Icons.email_outlined,
-          keyboard: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 14),
-        _textField(
-          controller: _passwordController,
-          hint: 'Password',
-          icon: Icons.lock_outline,
-          obscure: _obscurePassword,
-          suffix: IconButton(
-            icon: Icon(
-              _obscurePassword
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: const Color(0xFF8F92A1),
-              size: 20,
-            ),
-            onPressed: () =>
-                setState(() => _obscurePassword = !_obscurePassword),
-          ),
-        ),
-        const SizedBox(height: 20),
-        _primaryButton(
-          _isLogin ? 'Login' : 'Create Account',
-          _emailAuth,
-          icon: Icons.arrow_forward,
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(child: Divider(color: Colors.grey[300])),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('OR',
-                  style: TextStyle(
-                      color: Color(0xFF8F92A1),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600)),
-            ),
-            Expanded(child: Divider(color: Colors.grey[300])),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _googleButton(),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: () => setState(() {
-            _isLogin = !_isLogin;
-            _error = null;
-          }),
-          child: Text(
-            _isLogin
-                ? "Don't have an account? Sign up"
-                : "Already have an account? Login",
-            style: const TextStyle(
-              color: Color(0xFF2196F3),
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNameForm() {
-    return Column(
-      children: [
-        _textField(
-          controller: _nameController,
-          hint: 'Your name',
-          icon: Icons.person_outline,
-        ),
-        const SizedBox(height: 20),
-        _primaryButton('Continue', () async {
-          if (_nameController.text.trim().isEmpty) {
-            setState(() => _error = 'Please enter your name');
-            return;
-          }
-          setState(() => _loading = true);
-          await _chatService.createUserIfNotExists(
-            _nameController.text.trim(),
-            _auth.currentUser!.uid,
-          );
-          _goHome();
-        }),
-      ],
-    );
-  }
-
-  // ============ COMPONENTS ============
   Widget _textField({
     required TextEditingController controller,
     required String hint,
@@ -870,37 +631,6 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _privacyText() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2196F3).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(
-            Icons.lock_outline,
-            color: Color(0xFF2196F3),
-            size: 16,
-          ),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Text(
-            "Your phone number won't be shared with anyone else. It's used only for verification.",
-            style: TextStyle(
-              fontSize: 13,
-              color: Color(0xFF8F92A1),
-              height: 1.5,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

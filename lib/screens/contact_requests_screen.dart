@@ -23,10 +23,34 @@ class ContactRequestsScreen extends StatelessWidget {
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: service.getIncomingRequests(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                    const SizedBox(height: 16),
+                    const Text('Error loading requests',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {},
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-                child:
-                    CircularProgressIndicator(color: Color(0xFF2196F3)));
+                child: CircularProgressIndicator(color: Color(0xFF2196F3)));
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return _empty();
@@ -153,20 +177,12 @@ class ContactRequestsScreen extends StatelessWidget {
                   onPressed: () async {
                     await service.acceptContactRequest(req.id, req.fromUid);
                     if (context.mounted) {
-                      final chatId =
-                          await service.createOrGetChatRoom(req.fromUid);
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              chatId: chatId,
-                              otherUserName: req.fromName,
-                              otherUserPhoto: req.fromPhoto,
-                            ),
-                          ),
-                        );
-                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${req.fromName} added to your space!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -210,8 +226,14 @@ class ContactRequestsScreen extends StatelessWidget {
                 color: Color(0xFF1A1A2E),
               )),
           const SizedBox(height: 8),
-          const Text('Contact requests will appear here',
-              style: TextStyle(color: Color(0xFF8F92A1), fontSize: 14)),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'Contact requests from other users will appear here',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF8F92A1), fontSize: 14),
+            ),
+          ),
         ],
       ),
     );
