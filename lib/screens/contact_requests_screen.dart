@@ -183,6 +183,19 @@ class ContactRequestsScreen extends StatelessWidget {
                           backgroundColor: Colors.green,
                         ),
                       );
+                      final chatId = await service.createOrGetChatRoom(req.fromUid);
+                      if (context.mounted && chatId.isNotEmpty) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              chatId: chatId,
+                              otherUserName: req.fromName,
+                              otherUserPhoto: req.fromPhoto,
+                            ),
+                          ),
+                        );
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(

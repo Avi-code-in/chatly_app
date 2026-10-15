@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/chat_service.dart';
 import '../models/user_model.dart';
-import '../theme.dart';
+import '../widgets/full_screen_image.dart';
 import 'chat_screen.dart';
 
 class NewChatScreen extends StatefulWidget {
@@ -37,6 +38,54 @@ class _NewChatScreenState extends State<NewChatScreen> {
         _searchResults = results;
         _searching = false;
       });
+    }
+  }
+
+  Future<void> _openChat(UserModel user) async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF2196F3)),
+        ),
+      );
+
+      final chatId = await _service.createOrGetChatRoom(user.uid);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      if (chatId.isNotEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              chatId: chatId,
+              otherUserName: user.name,
+              otherUserPhoto: user.photoUrl,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open chat'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -79,7 +128,8 @@ class _NewChatScreenState extends State<NewChatScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _service.sendContactRequest(user.uid, controller.text.trim());
+              await _service.sendContactRequest(
+                  user.uid, controller.text.trim());
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -151,7 +201,6 @@ class _NewChatScreenState extends State<NewChatScreen> {
             ),
           ),
 
-          // Content
           Expanded(
             child: _searchController.text.isNotEmpty
                 ? _buildSearchResults()
@@ -258,55 +307,71 @@ class _NewChatScreenState extends State<NewChatScreen> {
   }
 
   Widget _userTile(UserModel user, {required bool showAddButton}) {
-    final hasPhoto =
-        user.photoUrl != null && user.photoUrl!.startsWith('data:image');
+    final hasPhoto = _hasImage(user.photoUrl);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2196F3).withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16)),
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor:
-                  const Color(0xFF2196F3).withOpacity(0.15),
-              backgroundImage:
-                  hasPhoto ? MemoryImage(_decode(user.photoUrl!)) : null,
-              child: !hasPhoto
-                  ? Text(
-                      user.name.isNotEmpty
-                          ? user.name[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: Color(0xFF2196F3),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    )
-                  : null,
-            ),
-            if (user.isOnline)
-              Positioned(
-                bottom: 1,
-                right: 1,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00C853),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
+        leading: GestureDetector(
+          onTap: () => showProfilePicture(
+            context,
+            name: user.name,
+            photoUrl: user.photoUrl,
+            subtitle: '@${user.username}',
+          ),
+          child: Stack(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor:
+                    const Color(0xFF2196F3).withOpacity(0.15),
+                child: ClipOval(
+                  child: hasPhoto
+                      ? _buildImage(user.photoUrl!, 48)
+                      : Center(
+                          child: Text(
+                            user.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Color(0xFF2196F3),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
                 ),
               ),
-          ],
+              if (user.isOnline)
+                Positioned(
+                  bottom: 1,
+                  right: 1,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00C853),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
         title: Text(user.name,
             style: const TextStyle(
@@ -325,23 +390,38 @@ class _NewChatScreenState extends State<NewChatScreen> {
             : IconButton(
                 icon: const Icon(Icons.chat_bubble_outline,
                     color: Color(0xFF2196F3)),
-                onPressed: () async {
-                  final chatId =
-                      await _service.createOrGetChatRoom(user.uid);
-                  if (mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          chatId: chatId,
-                          otherUserName: user.name,
-                          otherUserPhoto: user.photoUrl,
-                        ),
-                      ),
-                    );
-                  }
-                },
+                onPressed: () => _openChat(user),
               ),
+      ),
+    );
+  }
+
+  bool _hasImage(String? url) {
+    if (url == null || url.isEmpty) return false;
+    return url.startsWith('data:image') || url.startsWith('http');
+  }
+
+  Widget _buildImage(String url, double size) {
+    if (url.startsWith('data:image')) {
+      return Image.memory(
+        _decode(url),
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      placeholder: (c, u) => Container(
+        color: const Color(0xFF2196F3).withOpacity(0.1),
+        child: const Icon(Icons.person, color: Color(0xFF2196F3), size: 20),
+      ),
+      errorWidget: (c, u, e) => Container(
+        color: const Color(0xFF2196F3).withOpacity(0.1),
+        child: const Icon(Icons.person, color: Color(0xFF2196F3), size: 20),
       ),
     );
   }
