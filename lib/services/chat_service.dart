@@ -1017,4 +1017,235 @@ class ChatService {
     await updateOnlineStatus(false);
     await _auth.signOut();
   }
+
+  // ==================== FAVOURITE ====================
+  Future<void> toggleFavourite(String otherUid) async {
+    final uid = currentUserId;
+    final doc = await _firestore
+        .collection('users').doc(uid)
+        .collection('favourites').doc(otherUid).get();
+    if (doc.exists) {
+      await _firestore.collection('users').doc(uid)
+          .collection('favourites').doc(otherUid).delete();
+    } else {
+      await _firestore.collection('users').doc(uid)
+          .collection('favourites').doc(otherUid).set({
+        'uid': otherUid,
+        'addedAt': DateTime.now().toIso8601String(),
+      });
+    }
+  }
+
+  Future<bool> isFavourite(String otherUid) async {
+    final uid = currentUserId;
+    final doc = await _firestore.collection('users').doc(uid)
+        .collection('favourites').doc(otherUid).get();
+    return doc.exists;
+  }
+
+  Stream<List<String>> getFavouriteUids() {
+    final uid = currentUserId;
+    return _firestore.collection('users').doc(uid)
+        .collection('favourites').snapshots()
+        .map((s) => s.docs.map((d) => d.id).toList());
+  }
+
+  // ==================== PIN LOCK ====================
+  Future<void> setChatPin(String chatId, String pin) async {
+    final uid = currentUserId;
+    await _firestore.collection('users').doc(uid)
+        .collection('chat_pins').doc(chatId).set({
+      'pin': pin,
+      'setAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<String?> getChatPin(String chatId) async {
+    final uid = currentUserId;
+    final doc = await _firestore.collection('users').doc(uid)
+        .collection('chat_pins').doc(chatId).get();
+    if (!doc.exists) return null;
+    return doc.data()?['pin'] as String?;
+  }
+
+  Future<void> removeChatPin(String chatId) async {
+    final uid = currentUserId;
+    await _firestore.collection('users').doc(uid)
+        .collection('chat_pins').doc(chatId).delete();
+  }
+
+  Future<bool> hasChatPin(String chatId) async {
+    final pin = await getChatPin(chatId);
+    return pin != null && pin.isNotEmpty;
+  }
+
+  // ==================== SCHEDULED WORKER ====================
+  Future<void> processScheduledMessages() async {
+    final uid = currentUserId;
+    final now = DateTime.now().toIso8601String();
+    final pending = await _firestore.collection('scheduled_messages')
+        .where('senderId', isEqualTo: uid)
+        .where('isSent', isEqualTo: false)
+        .get();
+    for (var doc in pending.docs) {
+      final data = doc.data();
+      final scheduledAt = data['scheduledAt'] as String?;
+      if (scheduledAt != null && scheduledAt.compareTo(now) <= 0) {
+        await sendMessage(data['chatId'], data['text']);
+        await doc.reference.update({'isSent': true});
+      }
+    }
+  }
+
+  // ==================== MULTI-DELETE ====================
+  Future<void> deleteMultipleMessages(
+      String chatId, List<String> messageIds) async {
+    for (var id in messageIds) {
+      await _firestore.collection('chats').doc(chatId)
+          .collection('messages').doc(id).delete();
+    }
+  }
+
+  // ==================== STORAGE CALC ====================
+  Future<Map<String, int>> getStorageStats() async {
+    final uid = currentUserId;
+    final chats = await _firestore.collection('chats')
+        .where('participants', arrayContains: uid).get();
+    int images = 0, videos = 0, docs = 0, voice = 0;
+    for (var chat in chats.docs) {
+      final msgs = await _firestore.collection('chats').doc(chat.id)
+          .collection('messages').get();
+      for (var m in msgs.docs) {
+        final t = m.data()['type'];
+        if (t == 'image') images++;
+        if (t == 'video') videos++;
+        if (t == 'file') docs++;
+        if (t == 'voice') voice++;
+      }
+    }
+    return {
+      'images': images,
+      'videos': videos,
+      'docs': docs,
+      'voice': voice,
+    };
+  }
+
+  // ==================== AUTO-REPLY TRIGGER ====================
+  Future<void> _triggerAutoReplyIfNeeded(String chatId, String receiverUid) async {
+    try {
+      final receiver = await getUserById(receiverUid);
+      if (receiver == null) return;
+
+      // Get receiver's auto-reply
+      final userDoc = await _firestore.collection('users').doc(receiverUid).get();
+      final autoReply = userDoc.data()?['autoReply'] as Map<String, dynamic>?;
+      if (autoReply == null) return;
+      if (autoReply['enabled'] != true) return;
+
+      // Check business hours
+      final onlyOutside = autoReply['onlyOutsideHours'] ?? false;
+      if (onlyOutside == true) {
+        final startH = autoReply['startHour'] ?? 22;
+        final endH = autoReply['endHour'] ?? 9;
+        final now = DateTime.now().hour;
+        bool isOutside;
+        if (startH < endH) {
+          isOutside = now >= startH && now < endH;
+        } else {
+          isOutside = now >= startH || now < endH;
+        }
+        if (!isOutside) return;
+      }
+
+      final message = autoReply['message'] as String? ?? '';
+      if (message.isEmpty) return;
+
+      // Send auto-reply as a special message
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .add({
+        'senderId': receiverUid,
+        'text': message,
+        'type': 'text',
+        'timestamp': DateTime.now().toIso8601String(),
+        'seen': false,
+        'isAutoReply': true,
+      });
+
+      await _firestore.collection('chats').doc(chatId).update({
+        'lastMessage': '🤖 $message',
+        'lastMessageTime': DateTime.now().toIso8601String(),
+        'lastMessageSender': receiverUid,
+      });
+    } catch (e) {
+      debugPrint('Auto-reply error: $e');
+    }
+  }
+
+  // ==================== FAST STORAGE CALC ====================
+  Future<Map<String, int>> getStorageStats() async {
+    final uid = currentUserId;
+    int images = 0, videos = 0, docs = 0, voice = 0, total = 0;
+    try {
+      final chats = await _firestore
+          .collection('chats')
+          .where('participants', arrayContains: uid)
+          .get();
+      final futures = chats.docs.map((chat) async {
+        final msgs = await _firestore
+            .collection('chats')
+            .doc(chat.id)
+            .collection('messages')
+            .get();
+        int i = 0, v = 0, d = 0, vo = 0;
+        for (var m in msgs.docs) {
+          final t = m.data()['type'] as String?;
+          if (t == 'image') i++;
+          if (t == 'video') v++;
+          if (t == 'file') d++;
+          if (t == 'voice') vo++;
+        }
+        return [i, v, d, vo];
+      });
+      final results = await Future.wait(futures);
+      for (var r in results) {
+        images += r[0];
+        videos += r[1];
+        docs += r[2];
+        voice += r[3];
+      }
+      total = images + videos + docs + voice;
+    } catch (e) {
+      debugPrint('Storage error: $e');
+    }
+    return {
+      'images': images,
+      'videos': videos,
+      'docs': docs,
+      'voice': voice,
+      'total': total,
+    };
+  }
+
+  // ==================== SEND MESSAGE WITH AUTO-REPLY ====================
+  Future<void> sendMessageWithAutoReply(String chatId, String text) async {
+    await sendMessage(chatId, text);
+    try {
+      final chatDoc = await _firestore.collection('chats').doc(chatId).get();
+      if (!chatDoc.exists) return;
+      final participants =
+          List<String>.from(chatDoc.data()?['participants'] ?? []);
+      final otherId = participants.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => '',
+      );
+      if (otherId.isEmpty) return;
+      await _triggerAutoReplyIfNeeded(chatId, otherId);
+    } catch (e) {
+      debugPrint('Send message with auto-reply error: $e');
+    }
+  }
 }

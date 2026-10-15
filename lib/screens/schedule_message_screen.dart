@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/chat_service.dart';
 import '../theme.dart';
 
@@ -16,6 +17,13 @@ class _ScheduleMessageScreenState extends State<ScheduleMessageScreen> {
   DateTime _selectedDate = DateTime.now().add(const Duration(hours: 1));
   TimeOfDay _selectedTime =
       TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1)));
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickDateTime() async {
     final date = await showDatePicker(
@@ -24,8 +32,7 @@ class _ScheduleMessageScreenState extends State<ScheduleMessageScreen> {
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (date == null) return;
-    if (!mounted) return;
+    if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: _selectedTime,
@@ -38,7 +45,13 @@ class _ScheduleMessageScreenState extends State<ScheduleMessageScreen> {
   }
 
   Future<void> _schedule() async {
-    if (_controller.text.trim().isEmpty) return;
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please type a message')),
+      );
+      return;
+    }
     final dt = DateTime(
       _selectedDate.year,
       _selectedDate.month,
@@ -48,67 +61,88 @@ class _ScheduleMessageScreenState extends State<ScheduleMessageScreen> {
     );
     if (dt.isBefore(DateTime.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please pick a future time')),
+        const SnackBar(
+            content: Text('Please pick a future time'),
+            backgroundColor: Colors.red),
       );
       return;
     }
-    await _service.scheduleMessage(widget.chatId, _controller.text.trim(), dt);
+    setState(() => _saving = true);
+    await _service.scheduleMessage(widget.chatId, text, dt);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Message scheduled!'),
+        SnackBar(
+          content: Text(
+              'Scheduled for ${_formatDate(dt)} at ${_formatTime(dt)}'),
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: const Color(0xFFF8FAFF),
       appBar: AppBar(
         title: const Text('Schedule Message'),
+        backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text('Message',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: const Color(0xFF2196F3).withOpacity(0.15),
+                    width: 1.5),
               ),
               child: TextField(
                 controller: _controller,
                 maxLines: 5,
+                style: const TextStyle(fontSize: 15),
                 decoration: const InputDecoration(
                   hintText: 'Type your message...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary),
+                  hintStyle:
+                      TextStyle(color: Color(0xFF8F92A1), fontSize: 15),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(20),
+                  contentPadding: EdgeInsets.all(18),
                 ),
               ),
             ),
             const SizedBox(height: 20),
+            const Text('Send at',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
             GestureDetector(
               onTap: _pickDateTime,
               child: Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: AppColors.background,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: const Color(0xFF2196F3).withOpacity(0.15),
+                      width: 1.5),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: AppTheme.blueGradient,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.schedule,
@@ -119,49 +153,149 @@ class _ScheduleMessageScreenState extends State<ScheduleMessageScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Send at',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
+                          Text(
+                            _formatDate(_selectedDate),
+                            style: const TextStyle(
+                              color: Color(0xFF1A1A2E),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year} • ${_selectedTime.format(context)}',
+                            _selectedTime.format(context),
                             style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF8F92A1),
+                              fontSize: 13,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios,
-                        size: 14, color: AppColors.textSecondary),
+                    const Icon(Icons.edit,
+                        size: 18, color: Color(0xFF2196F3)),
                   ],
                 ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 30),
+
+            // Pending scheduled messages
+            const Text('Pending scheduled',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('scheduled_messages')
+                  .where('senderId', isEqualTo: _service.currentUserId)
+                  .where('chatId', isEqualTo: widget.chatId)
+                  .where('isSent', isEqualTo: false)
+                  .snapshots(),
+              builder: (context, snap) {
+                if (!snap.hasData || snap.data!.docs.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'No scheduled messages',
+                      style:
+                          TextStyle(color: Color(0xFF8F92A1), fontSize: 13),
+                    ),
+                  );
+                }
+                return Column(
+                  children: snap.data!.docs.map((doc) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    final scheduledAt =
+                        DateTime.tryParse(d['scheduledAt'] ?? '') ??
+                            DateTime.now();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  d['text'] ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${_formatDate(scheduledAt)} • ${_formatTime(scheduledAt)}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF8F92A1),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red, size: 20),
+                            onPressed: () =>
+                                doc.reference.delete(),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 30),
             Container(
               height: 56,
               decoration: BoxDecoration(
-                gradient: AppTheme.blueGradient,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: AppTheme.blueShadow,
-              ),
-              child: ElevatedButton(
-                onPressed: _schedule,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shadowColor: Colors.transparent,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
                 ),
-                child: const Text(
-                  'Schedule Message',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF2196F3).withOpacity(0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _saving ? null : _schedule,
+                  borderRadius: BorderRadius.circular(30),
+                  child: Center(
+                    child: _saving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2.5),
+                          )
+                        : const Text(
+                            'Schedule',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
                 ),
               ),
             ),
@@ -169,5 +303,19 @@ class _ScheduleMessageScreenState extends State<ScheduleMessageScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+  }
+
+  String _formatTime(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 }

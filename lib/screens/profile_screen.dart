@@ -289,44 +289,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Storage & Data',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final service = ChatService();
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Storage & Data',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  FutureBuilder<Map<String, int>>(
+                    future: service.getStorageStats(),
+                    builder: (context, snap) {
+                      if (!snap.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: CircularProgressIndicator(color: Color(0xFF2196F3))),
+                        );
+                      }
+                      final stats = snap.data!;
+                      return Column(
+                        children: [
+                          _storageRow(Icons.image, 'Images', '${stats['images']} items'),
+                          const SizedBox(height: 12),
+                          _storageRow(Icons.videocam, 'Videos', '${stats['videos']} items'),
+                          const SizedBox(height: 12),
+                          _storageRow(Icons.insert_drive_file, 'Documents', '${stats['docs']} items'),
+                          const SizedBox(height: 12),
+                          _storageRow(Icons.mic, 'Voice', '${stats['voice']} items'),
+                          const SizedBox(height: 12),
+                          _storageRow(Icons.total, 'Total', '${stats['total']} messages'),
+                        ],
+                      );
+                    },
+                  ),
+                  const Divider(height: 32),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.delete_sweep, color: Colors.red),
+                    title: const Text('Clear cache'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Cache cleared!')),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              _storageRow(Icons.image, 'Images', 'Calculating...'),
-              const SizedBox(height: 12),
-              _storageRow(Icons.videocam, 'Videos', 'Calculating...'),
-              const SizedBox(height: 12),
-              _storageRow(Icons.insert_drive_file, 'Documents', 'Calculating...'),
-              const SizedBox(height: 12),
-              _storageRow(Icons.data_usage, 'Network usage', 'Auto-download on WiFi'),
-              const Divider(height: 32),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.delete_sweep, color: Colors.red),
-                title: const Text('Clear cache'),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Cache cleared!')),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

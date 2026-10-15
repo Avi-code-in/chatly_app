@@ -7,6 +7,7 @@ import '../services/chat_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/status_model.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'status_viewer_screen.dart';
 
 class StatusScreen extends StatefulWidget {
