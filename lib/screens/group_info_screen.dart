@@ -68,7 +68,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             SizedBox(
               height: 350,
               child: StreamBuilder<List<UserModel>>(
-                stream: _service.getUsers(),
+                stream: _service.getMySpaceUsers(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(

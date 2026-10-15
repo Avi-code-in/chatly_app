@@ -58,7 +58,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   SizedBox(
                     height: 200,
                     child: StreamBuilder<List<UserModel>>(
-                      stream: _service.getUsers(),
+                      stream: _service.getMySpaceUsers(),
                       builder: (context, snap) {
                         if (!snap.hasData) {
                           return const Center(

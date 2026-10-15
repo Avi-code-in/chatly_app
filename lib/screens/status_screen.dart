@@ -164,11 +164,8 @@ class _StatusScreenState extends State<StatusScreen> {
                       if (!snapshot.hasData || snapshot.data!.isEmpty) {
                         return _emptyState();
                       }
-                      final myContacts = await _service.getMyContacts();
-                      final contactUids = myContacts.map((u) => u.uid).toSet();
                       final statuses = snapshot.data!
                           .where((s) => s.userId != _service.currentUserId)
-                          .where((s) => contactUids.contains(s.userId))
                           .toList();
                       if (statuses.isEmpty) {
                         return const Center(
