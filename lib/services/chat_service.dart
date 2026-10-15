@@ -51,12 +51,39 @@ class ChatService {
     }
   }
 
-  Stream<List<UserModel>> getUsers() {
+  // Search by username (returns all matching users - for discovery)
+  Future<List<UserModel>> searchUsersByUsername(String query) async {
+    if (query.trim().isEmpty) return [];
+    final q = query.toLowerCase().trim();
+    final snap = await _firestore
+        .collection('users')
+        .orderBy('username')
+        .startAt([q])
+        .endAt(['${q}\uf8ff'])
+        .limit(20)
+        .get();
+    return snap.docs
+        .map((d) => UserModel.fromMap(d.data()))
+        .where((u) => u.uid != currentUserId)
+        .toList();
+  }
+
+  // Get my personal space (contacts only)
+  Stream<List<UserModel>> getMySpaceUsers() {
+    final uid = currentUserId;
     return _firestore
         .collection('users')
-        .where('uid', isNotEqualTo: currentUserId)
+        .doc(uid)
+        .collection('contacts')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => UserModel.fromMap(doc.data())).toList());
+        .asyncMap((snap) async {
+      final users = <UserModel>[];
+      for (var doc in snap.docs) {
+        final u = await getUserById(doc.id);
+        if (u != null) users.add(u);
+      }
+      return users;
+    });
   }
 
   Future<UserModel?> getUserById(String uid) async {
@@ -741,4 +768,269 @@ class ChatService {
     await updateOnlineStatus(false);
     await _auth.signOut();
   }
+}
+
+// ============ SAFETY & PRIVACY EXTENSION ============
+extension ChatServiceSafety on ChatService {
+  // --- USERNAME ---
+  Future<bool> isUsernameAvailable(String username) async {
+    final snap = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: username.toLowerCase().trim())
+        .limit(1)
+        .get();
+    return snap.docs.isEmpty;
+  }
+
+  Future<void> setUsername(String username) async {
+    final uid = currentUserId;
+    await _firestore.collection('users').doc(uid).update({
+      'username': username.toLowerCase().trim(),
+    });
+  }
+
+  Future<UserModel?> searchByUsername(String username) async {
+    final snap = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: username.toLowerCase().trim())
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return UserModel.fromMap(snap.docs.first.data());
+  }
+
+  // --- CONTACT REQUESTS ---
+  Future<void> sendContactRequest(String toUid, String message) async {
+    final uid = currentUserId;
+    final user = await getCurrentUser().first;
+    if (user == null) return;
+
+    // Check if request already exists
+    final existing = await _firestore
+        .collection('contact_requests')
+        .where('fromUid', isEqualTo: uid)
+        .where('toUid', isEqualTo: toUid)
+        .where('status', isEqualTo: 'pending')
+        .get();
+    if (existing.docs.isNotEmpty) return;
+
+    final id = _uuid.v4();
+    await _firestore.collection('contact_requests').doc(id).set({
+      'id': id,
+      'fromUid': uid,
+      'fromName': user.name,
+      'fromUsername': user.username,
+      'fromPhoto': user.photoUrl,
+      'toUid': toUid,
+      'message': message,
+      'status': 'pending',
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> getIncomingRequests() {
+    final uid = currentUserId;
+    return _firestore
+        .collection('contact_requests')
+        .where('toUid', isEqualTo: uid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((s) {
+      final list = s.docs.map((d) => d.data()).toList();
+      list.sort((a, b) =>
+          (b['createdAt'] ?? '').compareTo(a['createdAt'] ?? ''));
+      return list;
+    });
+  }
+
+  Stream<int> getPendingRequestCount() {
+    return getIncomingRequests().map((l) => l.length);
+  }
+
+  Future<void> acceptContactRequest(String requestId, String fromUid) async {
+    await _firestore
+        .collection('contact_requests')
+        .doc(requestId)
+        .update({'status': 'accepted'});
+    // Add to contacts
+    final uid = currentUserId;
+    await _firestore.collection('users').doc(uid).collection('contacts').doc(fromUid).set({
+      'uid': fromUid,
+      'addedAt': DateTime.now().toIso8601String(),
+    });
+    await _firestore.collection('users').doc(fromUid).collection('contacts').doc(uid).set({
+      'uid': uid,
+      'addedAt': DateTime.now().toIso8601String(),
+    });
+    // Create chat room
+    await createOrGetChatRoom(fromUid);
+  }
+
+  Future<void> rejectContactRequest(String requestId) async {
+    await _firestore
+        .collection('contact_requests')
+        .doc(requestId)
+        .update({'status': 'rejected'});
+  }
+
+  // --- CONTACTS LIST ---
+  Stream<List<String>> getMyContactUids() {
+    final uid = currentUserId;
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('contacts')
+        .snapshots()
+        .map((s) => s.docs.map((d) => d.id).toList());
+  }
+
+  Future<List<UserModel>> getMyContacts() async {
+    final uid = currentUserId;
+    final snap = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('contacts')
+        .get();
+    final list = <UserModel>[];
+    for (var doc in snap.docs) {
+      final u = await getUserById(doc.id);
+      if (u != null) list.add(u);
+    }
+    return list;
+  }
+
+  Future<bool> isContact(String otherUid) async {
+    final uid = currentUserId;
+    final doc = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('contacts')
+        .doc(otherUid)
+        .get();
+    return doc.exists;
+  }
+
+  // --- BLOCK/UNBLOCK ---
+  Future<void> blockUser(String otherUid) async {
+    final uid = currentUserId;
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('blocked')
+        .doc(otherUid)
+        .set({
+      'uid': otherUid,
+      'blockedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> unblockUser(String otherUid) async {
+    final uid = currentUserId;
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('blocked')
+        .doc(otherUid)
+        .delete();
+  }
+
+  Future<bool> isBlocked(String otherUid) async {
+    final uid = currentUserId;
+    final doc = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('blocked')
+        .doc(otherUid)
+        .get();
+    return doc.exists;
+  }
+
+  Stream<List<String>> getBlockedUids() {
+    final uid = currentUserId;
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('blocked')
+        .snapshots()
+        .map((s) => s.docs.map((d) => d.id).toList());
+  }
+
+  // --- REPORT ---
+  Future<void> reportUser(String otherUid, String reason) async {
+    final uid = currentUserId;
+    await _firestore.collection('reports').add({
+      'reporterUid': uid,
+      'reportedUid': otherUid,
+      'reason': reason,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // --- PRIVACY SETTINGS ---
+  Future<void> updatePrivacySettings({
+    String? whoCanMessage,
+    String? whoCanSeeProfile,
+    bool? readReceipts,
+    bool? lastSeenVisible,
+  }) async {
+    final uid = currentUserId;
+    final updates = <String, dynamic>{};
+    if (whoCanMessage != null) updates['whoCanMessage'] = whoCanMessage;
+    if (whoCanSeeProfile != null) updates['whoCanSeeProfile'] = whoCanSeeProfile;
+    if (readReceipts != null) updates['readReceipts'] = readReceipts;
+    if (lastSeenVisible != null) updates['lastSeenVisible'] = lastSeenVisible;
+    if (updates.isNotEmpty) {
+      await _firestore.collection('users').doc(uid).update(updates);
+    }
+  }
+
+  // --- CHECK IF CAN MESSAGE ---
+  Future<bool> canMessage(String otherUid) async {
+    final other = await getUserById(otherUid);
+    if (other == null) return false;
+
+    // Blocked check both ways
+    if (await isBlocked(otherUid)) return false;
+    final uid = currentUserId;
+    final otherBlocked = await _firestore
+        .collection('users')
+        .doc(otherUid)
+        .collection('blocked')
+        .doc(uid)
+        .get();
+    if (otherBlocked.exists) return false;
+
+    // Privacy check
+    switch (other.whoCanMessage) {
+      case 'nobody':
+        return false;
+      case 'contacts':
+        return await isContact(otherUid);
+      case 'everyone':
+      default:
+        return true;
+    }
+  }
+}
+
+// Status only from contacts
+Stream<List<StatusModel>> getStatusesFromContacts() {
+  final uid = currentUserId;
+  return _firestore
+      .collection('users')
+      .doc(uid)
+      .collection('contacts')
+      .snapshots()
+      .asyncMap((contactSnap) async {
+    final contactUids = contactSnap.docs.map((d) => d.id).toList();
+    if (contactUids.isEmpty) return <StatusModel>[];
+    final statusSnap = await _firestore.collection('statuses').get();
+    return statusSnap.docs
+        .map((d) => StatusModel.fromMap(d.data(), d.id))
+        .where((s) =>
+            !s.isExpired &&
+            s.userId != uid &&
+            contactUids.contains(s.userId))
+        .toList();
+  });
 }

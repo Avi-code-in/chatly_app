@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import '../services/chat_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/group_model.dart';
+import '../widgets/full_screen_image.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
 
@@ -248,14 +250,22 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               // Group Photo
               Center(
                 child: GestureDetector(
-                  onTap: iAmAdmin ? _pickGroupPhoto : null,
+                  onTap: () {
+                    if (hasPhoto) {
+                      showFullScreenImage(context, group.photoUrl!, senderName: group.name);
+                    } else if (iAmAdmin) {
+                      _pickGroupPhoto();
+                    }
+                  },
+                  onLongPress: iAmAdmin ? _pickGroupPhoto : null,
                   child: Stack(
                     children: [
                       CircleAvatar(
                         radius: 60,
                         backgroundColor: AppColors.primary.withOpacity(0.15),
-                        backgroundImage:
-                            hasPhoto ? NetworkImage(group.photoUrl!) : null,
+                        backgroundImage: hasPhoto
+                            ? CachedNetworkImageProvider(group.photoUrl!)
+                            : null,
                         child: !hasPhoto
                             ? const Icon(
                                 Icons.group,

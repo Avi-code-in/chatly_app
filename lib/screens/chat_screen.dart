@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -17,6 +18,7 @@ import '../theme.dart';
 import '../widgets/voice_message_bubble.dart';
 import '../widgets/location_message_bubble.dart';
 import '../widgets/voice_recorder_bar.dart';
+import '../widgets/full_screen_image.dart';
 import 'group_info_screen.dart';
 import 'chat_lock_screen.dart';
 import 'schedule_message_screen.dart';
@@ -514,7 +516,14 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Row(
           children: [
             GestureDetector(
-              onTap: isGroupChat ? _showGroupInfo : null,
+              onTap: isGroupChat
+                  ? _showGroupInfo
+                  : () => showProfilePicture(
+                        context,
+                        name: widget.otherUserName,
+                        photoUrl: widget.otherUserPhoto,
+                        subtitle: 'Online',
+                      ),
               child: isGroupChat
                   ? Container(
                       width: 40,
@@ -952,16 +961,33 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 if (msg.replyToId != null) _replyPreviewInBubble(msg),
                 if (msg.type == 'image' && msg.imageUrl != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
+                  GestureDetector(
+                    onTap: () => showFullScreenImage(
+                      context,
                       msg.imageUrl!,
-                      width: 220,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => const SizedBox(
+                      senderName: isMe ? 'You' : widget.otherUserName,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: msg.imageUrl!,
+                        width: 220,
+                        fit: BoxFit.cover,
+                        placeholder: (c, u) => Container(
                           width: 220,
-                          height: 100,
-                          child: Icon(Icons.broken_image)),
+                          height: 150,
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        errorWidget: (c, u, e) => const SizedBox(
+                            width: 220,
+                            height: 100,
+                            child: Icon(Icons.broken_image)),
+                      ),
                     ),
                   )
                 else if (msg.type == 'video' && msg.videoUrl != null)

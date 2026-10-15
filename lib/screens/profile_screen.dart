@@ -10,6 +10,7 @@ import '../services/cloudinary_service.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
 import 'auth_screen.dart';
+import '../widgets/full_screen_image.dart';
 import 'contact_tags_screen.dart';
 import 'broadcast_screen.dart';
 import 'auto_reply_screen.dart';

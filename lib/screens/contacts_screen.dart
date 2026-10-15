@@ -5,197 +5,177 @@ import '../services/chat_service.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
 import 'chat_screen.dart';
+import '../widgets/full_screen_image.dart';
 
-class ContactsScreen extends StatefulWidget {
+class ContactsScreen extends StatelessWidget {
   const ContactsScreen({super.key});
-
-  @override
-  State<ContactsScreen> createState() => _ContactsScreenState();
-}
-
-class _ContactsScreenState extends State<ContactsScreen> {
-  List<UserModel> _contacts = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadContacts();
-  }
-
-  Future<void> _loadContacts() async {
-    final service = ChatService();
-    final contacts = await service.getContactsOnly();
-    if (mounted) {
-      setState(() {
-        _contacts = contacts;
-        _loading = false;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final service = ChatService();
-
     return SafeArea(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Contacts',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh,
-                      color: AppColors.textPrimary),
-                  onPressed: () {
-                    setState(() => _loading = true);
-                    _loadContacts();
-                  },
-                ),
-              ],
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Text(
+              'My Space',
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A1A2E),
+              ),
             ),
           ),
           Expanded(
-            child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.primary))
-                : _contacts.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+            child: StreamBuilder<List<UserModel>>(
+              stream: service.getMySpaceUsers(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                      child: CircularProgressIndicator(
+                          color: Color(0xFF2196F3)));
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return _empty();
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: snapshot.data!.length,
+                  itemBuilder: (context, i) {
+                    final user = snapshot.data![i];
+                    final hasPhoto = user.photoUrl != null &&
+                        user.photoUrl!.startsWith('data:image');
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        leading: GestureDetector(
+                          onTap: () => showProfilePicture(
+                            context,
+                            name: user.name,
+                            photoUrl: user.photoUrl,
+                            subtitle: user.isOnline ? 'Online' : 'Offline',
+                          ),
+                          child: Stack(
                           children: [
-                            Icon(
-                              Icons.people_outline,
-                              size: 80,
-                              color: AppColors.textSecondary
-                                  .withOpacity(0.5),
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor:
+                                  const Color(0xFF2196F3).withOpacity(0.15),
+                              backgroundImage: hasPhoto
+                                  ? MemoryImage(_decode(user.photoUrl!))
+                                  : null,
+                              child: !hasPhoto
+                                  ? Text(
+                                      user.name.isNotEmpty
+                                          ? user.name[0].toUpperCase()
+                                          : '?',
+                                      style: const TextStyle(
+                                        color: Color(0xFF2196F3),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              'No contacts yet',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                            if (user.isOnline)
+                              Positioned(
+                                bottom: 1,
+                                right: 1,
+                                child: Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF00C853),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: Colors.white, width: 2),
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'App users with your contacts will appear here',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
                           ],
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: _contacts.length,
-                        itemBuilder: (context, index) {
-                          final user = _contacts[index];
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 6),
-                            leading: _avatar(user, 26),
-                            title: Text(
-                              user.name,
-                              style: const TextStyle(
+                        ),
+                        title: Text(user.name,
+                            style: const TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: AppColors.textPrimary,
+                                fontSize: 15)),
+                        subtitle: Text(
+                          user.isOnline ? 'Online' : 'Offline',
+                          style: TextStyle(
+                            color: user.isOnline
+                                ? const Color(0xFF00C853)
+                                : const Color(0xFF8F92A1),
+                            fontSize: 13,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios,
+                            size: 14, color: Color(0xFF8F92A1)),
+                        onTap: () async {
+                          final chatId =
+                              await service.createOrGetChatRoom(user.uid);
+                          if (context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  chatId: chatId,
+                                  otherUserName: user.name,
+                                  otherUserPhoto: user.photoUrl,
+                                ),
                               ),
-                            ),
-                            subtitle: Text(
-                              user.isOnline ? 'Online' : 'Offline',
-                              style: TextStyle(
-                                color: user.isOnline
-                                    ? Colors.green
-                                    : AppColors.textSecondary,
-                                fontSize: 13,
-                              ),
-                            ),
-                            onTap: () async {
-                              final chatId = await service
-                                  .createOrGetChatRoom(user.uid);
-                              if (context.mounted) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ChatScreen(
-                                      chatId: chatId,
-                                      otherUserName: user.name,
-                                      otherUserPhoto: user.photoUrl,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                          );
+                            );
+                          }
                         },
                       ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _avatar(UserModel user, double radius) {
-    final hasImage = user.photoUrl != null &&
-        user.photoUrl!.startsWith('data:image');
-    return Stack(
-      children: [
-        CircleAvatar(
-          radius: radius,
-          backgroundColor: AppColors.primary.withOpacity(0.15),
-          backgroundImage: hasImage
-              ? MemoryImage(_decodeBase64(user.photoUrl!))
-              : null,
-          child: !hasImage
-              ? Text(
-                  user.name.isNotEmpty
-                      ? user.name[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: radius * 0.7,
-                  ),
-                )
-              : null,
-        ),
-        if (user.isOnline)
-          Positioned(
-            bottom: 2,
-            right: 2,
-            child: Container(
-              width: radius * 0.5,
-              height: radius * 0.5,
-              decoration: BoxDecoration(
-                color: Colors.green,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.white, width: 2),
-              ),
+  Widget _empty() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2196F3).withOpacity(0.1),
+              shape: BoxShape.circle,
             ),
+            child: const Icon(Icons.people_outline,
+                size: 60, color: Color(0xFF2196F3)),
           ),
-      ],
+          const SizedBox(height: 20),
+          const Text('Your space is empty',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A1A2E),
+              )),
+          const SizedBox(height: 8),
+          const Text('Add contacts to start chatting',
+              style: TextStyle(color: Color(0xFF8F92A1), fontSize: 14)),
+        ],
+      ),
     );
   }
 
-  Uint8List _decodeBase64(String dataUrl) {
-    final base64String = dataUrl.split(',').last;
-    return base64Decode(base64String);
+  Uint8List _decode(String dataUrl) {
+    return base64Decode(dataUrl.split(',').last);
   }
 }

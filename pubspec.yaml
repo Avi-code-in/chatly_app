@@ -38,6 +38,9 @@ dependencies:
   flutter_timezone: ^5.1.1
   archive: ^4.5.2
   url_launcher: ^6.3.3
+  gal: ^2.3.3
+  http: ^1.6.0
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:

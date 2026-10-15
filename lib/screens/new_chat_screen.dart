@@ -15,7 +15,9 @@ class NewChatScreen extends StatefulWidget {
 
 class _NewChatScreenState extends State<NewChatScreen> {
   final _searchController = TextEditingController();
-  String _query = '';
+  final _service = ChatService();
+  List<UserModel> _searchResults = [];
+  bool _searching = false;
 
   @override
   void dispose() {
@@ -23,194 +25,328 @@ class _NewChatScreenState extends State<NewChatScreen> {
     super.dispose();
   }
 
+  Future<void> _search(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    setState(() => _searching = true);
+    final results = await _service.searchUsersByUsername(query);
+    if (mounted) {
+      setState(() {
+        _searchResults = results;
+        _searching = false;
+      });
+    }
+  }
+
+  void _showSendRequestDialog(UserModel user) {
+    final controller = TextEditingController(
+        text: 'Hi ${user.name}, I\'d like to connect with you on Chatly.');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Add ${user.name}?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('@${user.username}',
+                style: const TextStyle(
+                    color: Color(0xFF8F92A1), fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Add a message...',
+                filled: true,
+                fillColor: const Color(0xFFF8FAFF),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _service.sendContactRequest(user.uid, controller.text.trim());
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Request sent!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2196F3),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Send Request'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final service = ChatService();
-
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: const Color(0xFFF8FAFF),
       appBar: AppBar(
         title: const Text('New Chat'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
       ),
       body: Column(
         children: [
+          // Search bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: const Color(0xFF2196F3).withOpacity(0.15),
+                    width: 1.5),
               ),
               child: TextField(
                 controller: _searchController,
-                onChanged: (v) => setState(() => _query = v.toLowerCase()),
-                decoration: const InputDecoration(
-                  hintText: 'Search users...',
-                  hintStyle: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                  ),
-                  prefixIcon:
-                      Icon(Icons.search, color: AppColors.textSecondary),
+                onChanged: _search,
+                style: const TextStyle(fontSize: 15),
+                decoration: InputDecoration(
+                  hintText: 'Search username...',
+                  hintStyle: const TextStyle(
+                      color: Color(0xFF8F92A1), fontSize: 15),
+                  prefixIcon: const Icon(Icons.search,
+                      color: Color(0xFF2196F3), size: 22),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close,
+                              color: Color(0xFF8F92A1)),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchResults = []);
+                          },
+                        )
+                      : null,
                   border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 16),
                 ),
               ),
             ),
           ),
+
+          // Content
           Expanded(
-            child: StreamBuilder<List<UserModel>>(
-              stream: service.getUsers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.primary),
-                  );
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return _emptyState();
-                }
-                final users = snapshot.data!.where((u) {
-                  return u.name.toLowerCase().contains(_query) ||
-                      u.email.toLowerCase().contains(_query);
-                }).toList();
-                if (users.isEmpty) return _emptyState();
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final user = users[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 6),
-                      leading: _avatar(user, 26),
-                      title: Text(
-                        user.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        user.isOnline ? 'Online' : 'Offline',
-                        style: TextStyle(
-                          color: user.isOnline
-                              ? AppColors.online
-                              : AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                      ),
-                      onTap: () async {
-                        final chatId =
-                            await service.createOrGetChatRoom(user.uid);
-                        if (context.mounted) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                chatId: chatId,
-                                otherUserName: user.name,
-                                otherUserPhoto: user.photoUrl,
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+            child: _searchController.text.isNotEmpty
+                ? _buildSearchResults()
+                : _buildPersonalSpace(),
           ),
         ],
       ),
     );
   }
 
-  Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.people_outline,
-            size: 80,
-            color: AppColors.textSecondary.withOpacity(0.5),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'No users found',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Registered users will appear here',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
+  Widget _buildSearchResults() {
+    if (_searching) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF2196F3)));
+    }
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text('No users found',
+            style: TextStyle(color: Color(0xFF8F92A1), fontSize: 14)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, i) =>
+          _userTile(_searchResults[i], showAddButton: true),
     );
   }
 
-  Widget _avatar(UserModel user, double radius) {
-    final hasImage = user.photoUrl != null &&
-        user.photoUrl!.startsWith('data:image');
-    return Stack(
+  Widget _buildPersonalSpace() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: radius,
-          backgroundColor: AppColors.primary.withOpacity(0.15),
-          backgroundImage: hasImage
-              ? MemoryImage(_decodeBase64(user.photoUrl!))
-              : null,
-          child: !hasImage
-              ? Text(
-                  user.name.isNotEmpty
-                      ? user.name[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: radius * 0.7,
-                  ),
-                )
-              : null,
-        ),
-        if (user.isOnline)
-          Positioned(
-            bottom: 2,
-            right: 2,
-            child: Container(
-              width: radius * 0.5,
-              height: radius * 0.5,
-              decoration: BoxDecoration(
-                color: AppColors.online,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.white, width: 2),
-              ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: Text(
+            'YOUR SPACE',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF2196F3),
+              letterSpacing: 1.2,
             ),
           ),
+        ),
+        Expanded(
+          child: StreamBuilder<List<UserModel>>(
+            stream: _service.getMySpaceUsers(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(
+                        color: Color(0xFF2196F3)));
+              }
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return _emptySpace();
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: snapshot.data!.length,
+                itemBuilder: (context, i) =>
+                    _userTile(snapshot.data![i], showAddButton: false),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
 
-  Uint8List _decodeBase64(String dataUrl) {
-    final base64String = dataUrl.split(',').last;
-    return base64Decode(base64String);
+  Widget _emptySpace() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2196F3).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person_search,
+                size: 60, color: Color(0xFF2196F3)),
+          ),
+          const SizedBox(height: 20),
+          const Text('Your space is empty',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A1A2E),
+              )),
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'Search users by username and send them a request to connect',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF8F92A1), fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _userTile(UserModel user, {required bool showAddButton}) {
+    final hasPhoto =
+        user.photoUrl != null && user.photoUrl!.startsWith('data:image');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor:
+                  const Color(0xFF2196F3).withOpacity(0.15),
+              backgroundImage:
+                  hasPhoto ? MemoryImage(_decode(user.photoUrl!)) : null,
+              child: !hasPhoto
+                  ? Text(
+                      user.name.isNotEmpty
+                          ? user.name[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: Color(0xFF2196F3),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    )
+                  : null,
+            ),
+            if (user.isOnline)
+              Positioned(
+                bottom: 1,
+                right: 1,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00C853),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        title: Text(user.name,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                color: Color(0xFF1A1A2E))),
+        subtitle: Text('@${user.username}',
+            style: const TextStyle(
+                color: Color(0xFF8F92A1), fontSize: 13)),
+        trailing: showAddButton
+            ? IconButton(
+                icon: const Icon(Icons.person_add,
+                    color: Color(0xFF2196F3)),
+                onPressed: () => _showSendRequestDialog(user),
+              )
+            : IconButton(
+                icon: const Icon(Icons.chat_bubble_outline,
+                    color: Color(0xFF2196F3)),
+                onPressed: () async {
+                  final chatId =
+                      await _service.createOrGetChatRoom(user.uid);
+                  if (mounted) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          chatId: chatId,
+                          otherUserName: user.name,
+                          otherUserPhoto: user.photoUrl,
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+      ),
+    );
+  }
+
+  Uint8List _decode(String dataUrl) {
+    return base64Decode(dataUrl.split(',').last);
   }
 }
