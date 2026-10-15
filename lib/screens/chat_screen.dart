@@ -503,7 +503,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final hasImage = widget.otherUserPhoto != null &&
-        widget.otherUserPhoto!.startsWith('data:image');
+        widget.otherUserPhoto!.isNotEmpty &&
+        (widget.otherUserPhoto!.startsWith('data:image') ||
+         widget.otherUserPhoto!.startsWith('http'));
 
     return Scaffold(
       backgroundColor: const Color(0xFFECE5DD),
@@ -538,22 +540,36 @@ class _ChatScreenState extends State<ChatScreen> {
                   : CircleAvatar(
                       radius: 20,
                       backgroundColor: Colors.white.withOpacity(0.25),
-                      backgroundImage: hasImage
-                          ? MemoryImage(
-                              _decodeBase64(widget.otherUserPhoto!))
-                          : null,
-                      child: !hasImage
-                          ? Text(
-                              widget.otherUserName.isNotEmpty
-                                  ? widget.otherUserName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                      child: ClipOval(
+                        child: hasImage
+                            ? (widget.otherUserPhoto!.startsWith('data:image')
+                                ? Image.memory(
+                                    _decodeBase64(widget.otherUserPhoto!),
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                  )
+                                : CachedNetworkImage(
+                                    imageUrl: widget.otherUserPhoto!,
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                    placeholder: (c, u) => const Icon(Icons.person, color: Colors.white),
+                                    errorWidget: (c, u, e) => const Icon(Icons.person, color: Colors.white),
+                                  ))
+                            : Center(
+                                child: Text(
+                                  widget.otherUserName.isNotEmpty
+                                      ? widget.otherUserName[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                               ),
-                            )
-                          : null,
+                      ),
                     ),
             ),
             const SizedBox(width: 12),

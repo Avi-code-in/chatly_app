@@ -353,6 +353,12 @@ class ChatService {
     return chatId;
   }
 
+  // Get chatId for a contact and ensure chat room exists
+  Future<String> openChatWithUser(String otherUserId) async {
+    // First add to contacts if not already (for safety)
+    return await createOrGetChatRoom(otherUserId);
+  }
+
   String _generateChatId(String u1, String u2) {
     final ids = [u1, u2]..sort();
     return '${ids[0]}_${ids[1]}';
