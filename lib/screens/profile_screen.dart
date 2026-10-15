@@ -323,7 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 12),
                           _storageRow(Icons.mic, 'Voice', '${stats['voice']} items'),
                           const SizedBox(height: 12),
-                          _storageRow(Icons.total, 'Total', '${stats['total']} messages'),
+                          _storageRow(Icons.summarize, 'Total', '${stats['total']} messages'),
                         ],
                       );
                     },

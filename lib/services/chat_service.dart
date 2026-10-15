@@ -1107,29 +1107,7 @@ class ChatService {
   }
 
   // ==================== STORAGE CALC ====================
-  Future<Map<String, int>> getStorageStats() async {
-    final uid = currentUserId;
-    final chats = await _firestore.collection('chats')
-        .where('participants', arrayContains: uid).get();
-    int images = 0, videos = 0, docs = 0, voice = 0;
-    for (var chat in chats.docs) {
-      final msgs = await _firestore.collection('chats').doc(chat.id)
-          .collection('messages').get();
-      for (var m in msgs.docs) {
-        final t = m.data()['type'];
-        if (t == 'image') images++;
-        if (t == 'video') videos++;
-        if (t == 'file') docs++;
-        if (t == 'voice') voice++;
-      }
-    }
-    return {
-      'images': images,
-      'videos': videos,
-      'docs': docs,
-      'voice': voice,
-    };
-  }
+
 
   // ==================== AUTO-REPLY TRIGGER ====================
   Future<void> _triggerAutoReplyIfNeeded(String chatId, String receiverUid) async {
