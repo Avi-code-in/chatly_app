@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme.dart';
 
 class LocationMessageBubble extends StatelessWidget {
@@ -19,6 +20,17 @@ class LocationMessageBubble extends StatelessWidget {
     required this.isMe,
   });
 
+  Future<void> _openInMaps() async {
+    final url = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+    );
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      print('Cannot open maps: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -30,11 +42,12 @@ class LocationMessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Map preview placeholder
+          // Map preview
           Container(
             height: 130,
             decoration: BoxDecoration(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
               gradient: LinearGradient(
                 colors: [
                   AppColors.primary.withOpacity(0.15),
@@ -47,7 +60,6 @@ class LocationMessageBubble extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Grid lines to look like map
                 CustomPaint(
                   size: const Size(double.infinity, 130),
                   painter: _MapPlaceholderPainter(),
@@ -102,7 +114,7 @@ class LocationMessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          // Address
+          // Info area
           Padding(
             padding: const EdgeInsets.all(10),
             child: Column(
@@ -130,28 +142,31 @@ class LocationMessageBubble extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.open_in_new,
-                          size: 12, color: AppColors.primary),
-                      SizedBox(width: 4),
-                      Text(
-                        'Open in Maps',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                GestureDetector(
+                  onTap: _openInMaps,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.open_in_new,
+                            size: 12, color: AppColors.primary),
+                        SizedBox(width: 4),
+                        Text(
+                          'Open in Maps',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -177,11 +192,9 @@ class _MapPlaceholderPainter extends CustomPainter {
       ..color = AppColors.primary.withOpacity(0.15)
       ..strokeWidth = 0.8;
 
-    // Vertical lines
     for (double x = 0; x < size.width; x += 20) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
-    // Horizontal lines
     for (double y = 0; y < size.height; y += 20) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }

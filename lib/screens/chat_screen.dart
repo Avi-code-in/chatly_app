@@ -8,7 +8,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/chat_service.dart';
 import '../services/cloudinary_service.dart';
@@ -139,18 +138,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _showLoader('Getting location...');
     try {
       final pos = await Geolocator.getCurrentPosition();
-      String? address;
-      try {
-        final placemarks = await GeocodingPlatform.instance
-            .placemarkFromCoordinates(pos.latitude, pos.longitude);
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          address = '${p.street ?? ''}, ${p.locality ?? ''}, ${p.country ?? ''}'
-              .replaceAll(RegExp(r'^[,\s]+'), '');
-        }
-      } catch (e) {
-        print('Geocoding error: $e');
-      }
+      final address =
+          '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
 
       await _chatService.sendLocationMessage(
         widget.chatId,
@@ -163,7 +152,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showError('Location error: $e');
+      _showError('Location error: \${e}');
     }
   }
 
