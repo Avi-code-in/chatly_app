@@ -170,38 +170,7 @@ class _ChatsTabState extends State<_ChatsTab> {
   }
 
   Future<void> _handleTapChat(String chatId, UserModel user) async {
-    // Check block
-    if (await _chatService.isBlocked(user.uid)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${user.name} is blocked. Unblock to chat.'),
-            action: SnackBarAction(
-              label: 'Unblock',
-              onPressed: () => _chatService.unblockUser(user.uid),
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Check PIN
-    final hasPin = await _chatService.hasChatPin(chatId);
-    if (hasPin) {
-      final pin = await _chatService.getChatPin(chatId);
-      if (!mounted) return;
-      final entered = await _showPinDialog(context, isSetup: false);
-      if (entered != pin) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Wrong PIN'), backgroundColor: Colors.red),
-          );
-        }
-        return;
-      }
-    }
-
+    // Direct navigation - ChatScreen handles PIN/block internally
     if (!mounted) return;
     Navigator.push(
       context,
@@ -621,32 +590,4 @@ class _ChatsTabState extends State<_ChatsTab> {
   }
 }
 
-// PIN dialog helper
-Future<String?> _showPinDialog(BuildContext context, {required bool isSetup}) async {
-  final controller = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(isSetup ? 'Set PIN' : 'Enter PIN'),
-      content: TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        maxLength: 4,
-        obscureText: true,
-        autofocus: true,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
-        decoration: const InputDecoration(counterText: '', hintText: '----', border: OutlineInputBorder()),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, controller.text),
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2196F3), foregroundColor: Colors.white),
-          child: Text(isSetup ? 'Set' : 'Unlock'),
-        ),
-      ],
-    ),
-  );
-}
+

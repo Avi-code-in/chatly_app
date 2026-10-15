@@ -41,35 +41,53 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       _loading = true;
       _error = null;
     });
-    await _service.setChatPin(widget.chatId, p1);
-    if (mounted) {
+    try {
+      await _service.setChatPin(widget.chatId, p1);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chat locked successfully!'),
-          backgroundColor: Colors.green,
-        ),
+        const SnackBar(content: Text('Chat locked!'), backgroundColor: Colors.green),
       );
-      Navigator.pop(context, true);
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Failed: $e';
+      });
     }
   }
 
   Future<void> _removePin() async {
     final current = _currentPin.text.trim();
-    final stored = await _service.getChatPin(widget.chatId);
-    if (stored != current) {
-      setState(() => _error = 'Wrong current PIN');
+    if (current.length != 4) {
+      setState(() => _error = 'Enter 4-digit PIN');
       return;
     }
-    setState(() => _loading = true);
-    await _service.removeChatPin(widget.chatId);
-    if (mounted) {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final stored = await _service.getChatPin(widget.chatId);
+      if (stored != current) {
+        setState(() {
+          _loading = false;
+          _error = 'Wrong PIN';
+        });
+        return;
+      }
+      await _service.removeChatPin(widget.chatId);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lock removed'),
-          backgroundColor: Colors.orange,
-        ),
+        const SnackBar(content: Text('Lock removed'), backgroundColor: Colors.orange),
       );
-      Navigator.pop(context, true);
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Failed: $e';
+      });
     }
   }
 
@@ -81,7 +99,6 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         title: Text(widget.isRemoving ? 'Remove Lock' : 'Lock Chat'),
         backgroundColor: Colors.white,
         elevation: 0,
-        scrolledUnderElevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -91,17 +108,15 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFEEF1FF), Color(0xFFE0E6FF)],
-                ),
+                gradient: const LinearGradient(colors: [Color(0xFFEEF1FF), Color(0xFFE0E6FF)]),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF2196F3),
+                    decoration: BoxDecoration(
+                      color: widget.isRemoving ? Colors.orange : const Color(0xFF2196F3),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -112,106 +127,53 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    widget.isRemoving
-                        ? 'Remove lock from ${widget.chatName}'
-                        : 'Set 4-digit PIN for ${widget.chatName}',
+                    widget.isRemoving ? 'Remove lock from ${widget.chatName}' : 'Set 4-digit PIN for ${widget.chatName}',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A2E),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.isRemoving
-                        ? 'Enter current PIN to remove lock'
-                        : 'You\'ll need this PIN every time you open this chat',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF8F92A1),
-                    ),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF1A1A2E)),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 30),
-
-            if (widget.isRemoving) ...[
-              _pinField(_currentPin, 'Current PIN'),
-            ] else ...[
-              _pinField(_pin1, 'New PIN'),
+            if (widget.isRemoving)
+              _pinField(_currentPin)
+            else ...[
+              _pinField(_pin1),
               const SizedBox(height: 16),
-              _pinField(_pin2, 'Confirm PIN'),
+              _pinField(_pin2),
             ],
-
             if (_error != null) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline,
-                        color: Colors.red, size: 20),
+                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(_error!,
-                          style: const TextStyle(
-                              color: Colors.red, fontSize: 13)),
-                    ),
+                    Expanded(child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13))),
                   ],
                 ),
               ),
             ],
-
             const SizedBox(height: 30),
             Container(
               height: 56,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: widget.isRemoving
-                      ? [Colors.orange, Colors.deepOrange]
-                      : [const Color(0xFF2196F3), const Color(0xFF1976D2)],
+                  colors: widget.isRemoving ? [Colors.orange, Colors.deepOrange] : [const Color(0xFF2196F3), const Color(0xFF1976D2)],
                 ),
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: (widget.isRemoving
-                            ? Colors.orange
-                            : const Color(0xFF2196F3))
-                        .withOpacity(0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
               ),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: _loading
-                      ? null
-                      : (widget.isRemoving ? _removePin : _setPin),
+                  onTap: _loading ? null : (widget.isRemoving ? _removePin : _setPin),
                   borderRadius: BorderRadius.circular(30),
                   child: Center(
                     child: _loading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2.5))
-                        : Text(
-                            widget.isRemoving ? 'Remove Lock' : 'Set Lock',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                        : Text(widget.isRemoving ? 'Remove Lock' : 'Set Lock', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
@@ -222,13 +184,12 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     );
   }
 
-  Widget _pinField(TextEditingController controller, String hint) {
+  Widget _pinField(TextEditingController controller) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: const Color(0xFF2196F3).withOpacity(0.15), width: 1.5),
+        border: Border.all(color: const Color(0xFF2196F3).withOpacity(0.15), width: 1.5),
       ),
       child: TextField(
         controller: controller,
@@ -236,18 +197,13 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         maxLength: 4,
         obscureText: true,
         textAlign: TextAlign.center,
-        style: const TextStyle(
-            fontSize: 28, letterSpacing: 16, fontWeight: FontWeight.bold),
-        decoration: InputDecoration(
+        style: const TextStyle(fontSize: 28, letterSpacing: 16, fontWeight: FontWeight.bold),
+        decoration: const InputDecoration(
           hintText: '----',
-          hintStyle: TextStyle(
-            color: const Color(0xFF8F92A1).withOpacity(0.5),
-            fontSize: 28,
-            letterSpacing: 16,
-          ),
+          hintStyle: TextStyle(color: Color(0xFF8F92A1), fontSize: 28, letterSpacing: 16),
           counterText: '',
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 20),
+          contentPadding: EdgeInsets.symmetric(vertical: 20),
         ),
       ),
     );

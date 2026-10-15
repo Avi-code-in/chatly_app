@@ -1057,7 +1057,7 @@ class ChatService {
         .collection('chat_pins').doc(chatId).set({
       'pin': pin,
       'setAt': DateTime.now().toIso8601String(),
-    });
+    }).timeout(const Duration(seconds: 5));
   }
 
   Future<String?> getChatPin(String chatId) async {
@@ -1224,6 +1224,27 @@ class ChatService {
       await _triggerAutoReplyIfNeeded(chatId, otherId);
     } catch (e) {
       debugPrint('Send message with auto-reply error: $e');
+    }
+  }
+
+  // Global scheduled messages worker (call on app start)
+  Future<void> processAllScheduledMessages() async {
+    try {
+      final now = DateTime.now().toIso8601String();
+      final pending = await _firestore.collection('scheduled_messages')
+          .where('isSent', isEqualTo: false)
+          .get();
+      for (var doc in pending.docs) {
+        final data = doc.data();
+        if (data['senderId'] != currentUserId) continue;
+        final scheduledAt = data['scheduledAt'] as String?;
+        if (scheduledAt != null && scheduledAt.compareTo(now) <= 0) {
+          await sendMessage(data['chatId'], data['text']);
+          await doc.reference.update({'isSent': true});
+        }
+      }
+    } catch (e) {
+      debugPrint('Scheduled worker error: $e');
     }
   }
 }

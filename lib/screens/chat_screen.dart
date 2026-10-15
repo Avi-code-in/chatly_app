@@ -9,6 +9,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:gal/gal.dart';
+import 'package:http/http.dart' as http;
 import '../services/chat_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/message_model.dart';
@@ -18,6 +20,7 @@ import '../widgets/voice_message_bubble.dart';
 import '../widgets/location_message_bubble.dart';
 import '../widgets/voice_recorder_bar.dart';
 import '../widgets/full_screen_image.dart';
+import '../widgets/video_player_widget.dart';
 import 'group_info_screen.dart';
 import 'schedule_message_screen.dart';
 import 'pin_setup_screen.dart';
@@ -64,6 +67,50 @@ class _ChatScreenState extends State<ChatScreen> {
     _chatService.markMessagesAsSeen(widget.chatId);
     _checkLock();
     _startDisappearingWorker();
+    _checkBlocked();
+  }
+
+  Future<void> _checkBlocked() async {
+    try {
+      final chatDoc = await _chatService.getOtherUser(widget.chatId);
+      if (chatDoc == null) return;
+      final blocked = await _chatService.isBlocked(chatDoc.uid);
+      if (blocked && mounted) {
+        // still show chat, but with warning
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You have blocked ${widget.otherUserName}'),
+            action: SnackBarAction(
+              label: 'Unblock',
+              onPressed: () => _chatService.unblockUser(chatDoc.uid),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Block check error: $e');
+    }
+  }
+
+  final Set<String> _autoSavedIds = {};
+
+  Future<void> _autoSaveIncoming(MessageModel msg) async {
+    if (_autoSavedIds.contains(msg.id)) return;
+    if (msg.senderId == _chatService.currentUserId) return;
+    String? url;
+    if (msg.type == 'image') url = msg.imageUrl;
+    if (msg.type == 'video') url = msg.videoUrl;
+    if (url == null || url.isEmpty) return;
+    _autoSavedIds.add(msg.id);
+    try {
+      final resp = await http.get(Uri.parse(url));
+      if (resp.statusCode == 200) {
+        await Gal.putImageBytes(resp.bodyBytes, name: 'Chatly_${msg.id}');
+      }
+    } catch (e) {
+      print('Auto-save error: $e');
+    }
   }
 
   void _startDisappearingWorker() {
@@ -569,6 +616,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   return _emptyState();
                 }
                 final messages = snapshot.data!.where((m) => !m.isExpired).toList();
+                // Auto-save new incoming media
+                for (var m in messages) {
+                  if (m.senderId != _chatService.currentUserId &&
+                      (m.type == 'image' || m.type == 'video') &&
+                      !_autoSavedIds.contains(m.id)) {
+                    _autoSaveIncoming(m);
+                  }
+                }
                 return ListView.builder(
                   reverse: true,
                   padding: const EdgeInsets.all(8),
@@ -980,10 +1035,17 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           )
                         else if (msg.type == 'video' && msg.videoUrl != null)
-                          Container(
-                            width: 220, height: 150,
-                            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
-                            child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 50),
+                          VideoThumbnail(
+                            url: msg.videoUrl!,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FullScreenVideoPlayer(
+                                  url: msg.videoUrl!,
+                                  senderName: isMe ? 'You' : widget.otherUserName,
+                                ),
+                              ),
+                            ),
                           )
                         else if (msg.type == 'voice' && msg.voiceUrl != null)
                           VoiceMessageBubble(voiceUrl: msg.voiceUrl!, duration: msg.voiceDuration ?? 0, isMe: isMe, transcribedText: msg.transcribedText)
