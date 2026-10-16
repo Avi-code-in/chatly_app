@@ -101,7 +101,7 @@ class _CallScreenState extends State<CallScreen> {
       await _localRenderer.initialize();
       await _remoteRenderer.initialize();
       await _getMedia();
-      _pc = await _callService.createPeerConnection(widget.callId);
+      _pc = await _callService.createCallPeer(widget.callId);
       _setupPeer();
       if (widget.isCaller) {
         await _asCaller();

@@ -183,7 +183,7 @@ class CallService {
   }
 
   // ==================== WEBRTC PEER ====================
-  Future<RTCPeerConnection> createPeerConnection(String callId) async {
+  Future<RTCPeerConnection> createCallPeer(String callId) async {
     final config = <String, dynamic>{
       'iceServers': [
         {
@@ -197,6 +197,7 @@ class CallService {
       ],
       'sdpSemantics': 'unified-plan',
     };
+    // Use the global createPeerConnection from flutter_webrtc
     final pc = await createPeerConnection(config);
 
     pc.onIceCandidate = (candidate) {
