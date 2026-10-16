@@ -259,8 +259,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
     final callService = CallService();
     callService.listenIncomingCalls().listen((doc) async {
-      if (!doc.exists || doc.data() == null) return;
-      final data = doc.data() as Map<String, dynamic>;
+      if (doc == null || !doc.exists) return;
+      final rawData = doc.data();
+      if (rawData == null) return;
+      final data = rawData as Map<String, dynamic>;
       final callId = data['callId'] as String;
       final callerId = data['callerId'] as String;
       final callType = data['callType'] as String;
