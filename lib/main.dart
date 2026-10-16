@@ -50,8 +50,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         textAccept: 'Accept',
         textDecline: 'Decline',
         isFullScreen: true,
-        isShowCallID: false,
-        isShowMissedCallNotification: false,
       ),
       ios: const IOSParams(
         iconName: 'CallKitLogo',
@@ -239,9 +237,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         final params = event.callKitParams;
         final extra = params.extra;
         if (extra != null && navigatorKey.currentState != null) {
-          // Accept the call in Firestore
+          // Accept the call in Firestore (fire and forget)
           final callService = CallService();
-          await callService.acceptCall(extra['callId'] ?? '');
+          callService.acceptCall(extra['callId'] ?? '');
           
           navigatorKey.currentState!.push(
             MaterialPageRoute(
