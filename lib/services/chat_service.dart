@@ -1247,4 +1247,13 @@ class ChatService {
       debugPrint('Scheduled worker error: $e');
     }
   }
+
+  // ==================== LANGUAGE PREFERENCE ====================
+  Future<void> updatePreferredLanguage(String langCode) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    await _firestore.collection('users').doc(uid).update({
+      'preferredLanguage': langCode,
+    });
+  }
 }

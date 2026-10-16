@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import '../services/call_service.dart';
 import '../theme.dart';
 
@@ -58,8 +59,35 @@ class _CallScreenState extends State<CallScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
+    // 🔔 Outgoing ringtone (caller only, until connected)
+    if (widget.isCaller) {
+      _startOutgoingRing();
+    }
+
     _initAll();
     _hideTimer();
+  }
+
+  Future<void> _startOutgoingRing() async {
+    try {
+      await FlutterRingtonePlayer().play(
+        android: AndroidSounds.notification,
+        ios: IosSounds.glass,
+        looping: true,
+        volume: 0.6,
+        asAlarm: false,
+      );
+    } catch (e) {
+      print('Ringtone error: $e');
+    }
+  }
+
+  Future<void> _stopOutgoingRing() async {
+    try {
+      await FlutterRingtonePlayer().stop();
+    } catch (e) {
+      print('Stop ring error: $e');
+    }
   }
 
   void _hideTimer() {
@@ -231,6 +259,7 @@ class _CallScreenState extends State<CallScreen>
 
   void _markConnected() {
     if (_connected) return;
+    _stopOutgoingRing(); // 🔔 Stop ringtone when connected
     if (mounted) {
       setState(() {
         _connected = true;
@@ -278,6 +307,7 @@ class _CallScreenState extends State<CallScreen>
   }
 
   void _cleanup() {
+    _stopOutgoingRing(); // 🔔 Stop ring on call end
     _timer?.cancel();
     _localStream?.dispose();
     _pc?.close();
@@ -287,6 +317,7 @@ class _CallScreenState extends State<CallScreen>
 
   @override
   void dispose() {
+    _stopOutgoingRing();
     _timer?.cancel();
     _pulse.dispose();
     _callSub?.cancel();

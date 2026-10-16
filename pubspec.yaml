@@ -44,6 +44,8 @@ dependencies:
   metered_realtime: ^0.2.0
   flutter_webrtc: ^1.6.2+hotfix.4
   flutter_callkit_incoming: ^3.1.6
+  flutter_ringtone_player: ^4.0.0+4
+  vibration: ^3.2.1
 
 dev_dependencies:
   flutter_test:

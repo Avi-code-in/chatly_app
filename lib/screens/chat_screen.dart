@@ -24,6 +24,7 @@ import '../widgets/video_player_widget.dart';
 import 'group_info_screen.dart';
 import 'call_screen.dart';
 import '../services/call_service.dart';
+import '../services/translation_service.dart';
 import 'schedule_message_screen.dart';
 import 'pin_setup_screen.dart';
 import 'pin_unlock_screen.dart';
@@ -48,6 +49,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _chatService = ChatService();
   final _cloudinary = CloudinaryService();
+  final _translationService = TranslationService();
+  String _myLanguage = 'en';
+  final Map<String, String> _translatedMessages = {};
+  final Set<String> _loadingTranslations = {};
   final _imagePicker = ImagePicker();
   bool _showEmoji = false;
   MessageModel? _replyTo;
@@ -70,6 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _checkLock();
     _startDisappearingWorker();
     _checkBlocked();
+    _loadMyLanguage();
   }
 
   Future<void> _checkBlocked() async {
@@ -623,6 +629,14 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
             _optionItem(
+              icon: Icons.translate,
+              label: 'Translate',
+              onTap: () {
+                Navigator.pop(context);
+                _showTranslateDialog(msg);
+              },
+            ),
+            _optionItem(
               icon: Icons.forward,
               label: 'Forward',
               onTap: () {
@@ -1135,6 +1149,13 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                     ),
+                    if (_messageController.text.isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.translate,
+                            color: Color(0xFF2196F3), size: 22),
+                        tooltip: 'Translate before send',
+                        onPressed: _showTranslateSendDialog,
+                      ),
                     IconButton(icon: const Icon(Icons.attach_file, color: Color(0xFF8F92A1), size: 24), onPressed: _showAttachmentSheet),
                     if (_messageController.text.isEmpty)
                       IconButton(icon: const Icon(Icons.camera_alt, color: Color(0xFF8F92A1), size: 24), onPressed: _pickImageFromCamera),
@@ -1263,7 +1284,51 @@ class _ChatScreenState extends State<ChatScreen> {
                         else
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                            child: Text(msg.text, style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 15, height: 1.3)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(msg.text, style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 15, height: 1.3)),
+                                // Translated text
+                                if (_getTranslatedText(msg) != null &&
+                                    _getTranslatedText(msg) != msg.text) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    decoration: const BoxDecoration(
+                                      border: Border(
+                                        top: BorderSide(
+                                          color: Color(0xFF2196F3),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.translate, size: 12, color: Color(0xFF2196F3)),
+                                            SizedBox(width: 4),
+                                            Text('Translated', style: TextStyle(color: Color(0xFF2196F3), fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _getTranslatedText(msg)!,
+                                          style: const TextStyle(
+                                            color: Color(0xFF1A1A2E),
+                                            fontSize: 15,
+                                            height: 1.3,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         Padding(
                           padding: const EdgeInsets.only(top: 2),

@@ -13,6 +13,7 @@ class UserModel {
   final String whoCanSeeProfile; // 'everyone', 'contacts'
   final bool readReceipts;
   final bool lastSeenVisible;
+  final String preferredLanguage;
 
   UserModel({
     required this.uid,
@@ -27,6 +28,7 @@ class UserModel {
     this.whoCanSeeProfile = 'everyone',
     this.readReceipts = true,
     this.lastSeenVisible = true,
+    this.preferredLanguage = 'en',
   });
 
   Map<String, dynamic> toMap() {
@@ -43,6 +45,7 @@ class UserModel {
       'whoCanSeeProfile': whoCanSeeProfile,
       'readReceipts': readReceipts,
       'lastSeenVisible': lastSeenVisible,
+      'preferredLanguage': preferredLanguage,
     };
   }
 
@@ -62,6 +65,7 @@ class UserModel {
       whoCanSeeProfile: map['whoCanSeeProfile'] ?? 'everyone',
       readReceipts: map['readReceipts'] ?? true,
       lastSeenVisible: map['lastSeenVisible'] ?? true,
+      preferredLanguage: map['preferredLanguage'] ?? 'en',
     );
   }
 }

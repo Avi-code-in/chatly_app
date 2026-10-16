@@ -40,7 +40,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         'callerId': data['callerId'],
         'callType': data['callType'],
       },
-      android: const AndroidParams(
+      android: AndroidParams(
         isCustomNotification: true,
         isShowLogo: false,
         ringtonePath: 'system_ringtone_default',
@@ -50,6 +50,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         textAccept: 'Accept',
         textDecline: 'Decline',
         isFullScreen: true,
+        isShowCallID: false,
+        isShowMissedCallNotification: false,
       ),
       ios: const IOSParams(
         iconName: 'CallKitLogo',

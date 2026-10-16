@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chat_service.dart';
+import '../services/translation_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/user_model.dart';
 import '../theme.dart';
@@ -730,6 +731,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Contact Requests',
             'Accept or decline requests',
             () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactRequestsScreen())),
+          ),
+          _menuItem(
+            Icons.language,
+            'Language',
+            'Your preferred language for translation',
+            () => _showLanguageDialog(context),
           ),
           _menuItem(
             Icons.privacy_tip_outlined,

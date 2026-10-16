@@ -61,6 +61,7 @@ class _AuthScreenState extends State<AuthScreen> {
         await _auth.signInWithEmailAndPassword(
             email: email, password: password);
         await _chatService.updateOnlineStatus(true);
+        await _chatService.saveFcmToken();
       } else {
         final cred = await _auth.createUserWithEmailAndPassword(
             email: email, password: password);
@@ -118,6 +119,7 @@ class _AuthScreenState extends State<AuthScreen> {
             userCred.user!.displayName ?? 'User', uid);
       } else {
         await _chatService.updateOnlineStatus(true);
+        await _chatService.saveFcmToken();
       }
       _goHome();
     } catch (e) {

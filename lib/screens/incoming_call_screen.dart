@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import 'package:vibration/vibration.dart';
 import '../services/call_service.dart';
-import '../services/chat_service.dart';
 import '../theme.dart';
 import 'call_screen.dart';
 
@@ -32,6 +33,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   final _callService = CallService();
   late AnimationController _pulse;
   bool _processing = false;
+  Timer? _vibrationTimer;
 
   @override
   void initState() {
@@ -41,29 +43,52 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    // Vibration pattern
+    _startRingtone();
     _startVibration();
   }
 
-  void _startVibration() {
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted && !_processing) {
-        HapticFeedback.heavyImpact();
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_processing) {
-            HapticFeedback.heavyImpact();
-            _startVibration();
-          }
-        });
+  Future<void> _startRingtone() async {
+    try {
+      // Play system ringtone (loops automatically)
+      await FlutterRingtonePlayer().playRingtone(
+        looping: true,
+        volume: 1.0,
+        asAlarm: false,
+      );
+    } catch (e) {
+      print('Ringtone error: $e');
+    }
+  }
+
+  Future<void> _stopRingtone() async {
+    try {
+      await FlutterRingtonePlayer().stop();
+    } catch (e) {
+      print('Stop ringtone error: $e');
+    }
+  }
+
+  Future<void> _startVibration() async {
+    try {
+      if (await Vibration.hasVibrator() ?? false) {
+        Vibration.vibrate(pattern: [500, 1000, 500, 1000], repeat: 0);
       }
-    });
+    } catch (e) {
+      print('Vibration error: $e');
+    }
+  }
+
+  Future<void> _stopVibration() async {
+    try {
+      Vibration.cancel();
+    } catch (e) {}
   }
 
   Future<void> _accept() async {
     setState(() => _processing = true);
-    await _callService.acceptCall(widget.callId);
+    await _stopRingtone();
+    await _stopVibration();
 
-    // Remove incoming_calls doc
     await _callService.acceptCall(widget.callId);
 
     if (mounted) {
@@ -85,13 +110,18 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
   Future<void> _decline() async {
     setState(() => _processing = true);
+    await _stopRingtone();
+    await _stopVibration();
     await _callService.rejectCall(widget.callId);
     if (mounted) Navigator.pop(context);
   }
 
   @override
   void dispose() {
+    _stopRingtone();
+    _stopVibration();
     _pulse.dispose();
+    _vibrationTimer?.cancel();
     super.dispose();
   }
 
@@ -121,7 +151,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
               children: [
                 const SizedBox(height: 40),
 
-                // Call type badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 8),
@@ -155,7 +184,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                 const Spacer(),
 
-                // Pulsing avatar
                 AnimatedBuilder(
                   animation: _pulse,
                   builder: (context, child) {
@@ -179,7 +207,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                 const SizedBox(height: 30),
 
-                // Caller name
                 Text(
                   widget.callerName,
                   style: const TextStyle(
@@ -192,7 +219,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                 const SizedBox(height: 10),
 
-                // Status
                 Text(
                   'is calling you...',
                   style: TextStyle(
@@ -203,7 +229,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                 const SizedBox(height: 20),
 
-                // Ringing dots
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(3, (i) {
@@ -228,13 +253,11 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                 const Spacer(),
 
-                // Accept / Decline buttons
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      // Decline button
                       _actionButton(
                         icon: Icons.call_end,
                         label: 'Decline',
@@ -245,8 +268,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                         ),
                         onTap: _processing ? null : _decline,
                       ),
-
-                      // Accept button
                       _actionButton(
                         icon: isVideo ? Icons.videocam : Icons.call,
                         label: 'Accept',
@@ -263,7 +284,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                 const SizedBox(height: 60),
 
-                // Processing indicator
                 if (_processing)
                   const CircularProgressIndicator(color: Colors.white),
               ],
