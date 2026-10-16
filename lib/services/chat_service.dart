@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_model.dart';
 import '../models/message_model.dart';
@@ -1255,5 +1256,300 @@ class ChatService {
     await _firestore.collection('users').doc(uid).update({
       'preferredLanguage': langCode,
     });
+  }
+
+  // ==================== LIVE TYPING PREVIEW ====================
+  Future<void> updateTypingStatus(String chatId, String text) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    try {
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('typing')
+          .doc(uid)
+          .set({
+        'userId': uid,
+        'text': text.length > 60 ? text.substring(text.length - 60) : text,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+  }
+
+  Future<void> clearTypingStatus(String chatId) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    try {
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('typing')
+          .doc(uid)
+          .delete();
+    } catch (_) {}
+  }
+
+  Stream<String?> listenOtherUserTyping(String chatId, String otherUserId) {
+    return _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('typing')
+        .doc(otherUserId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      final data = doc.data();
+      if (data == null) return null;
+      final ts = data['timestamp'] as String?;
+      final text = data['text'] as String? ?? '';
+      if (ts == null || text.isEmpty) return null;
+      try {
+        final time = DateTime.parse(ts);
+        if (DateTime.now().difference(time).inSeconds > 6) {
+          return null;
+        }
+      } catch (_) {
+        return null;
+      }
+      return text;
+    });
+  }
+
+  Future<void> updateLiveTypingSetting(bool enabled) async {
+    final uid = currentUserId;
+    if (uid.isEmpty) return;
+    await _firestore.collection('users').doc(uid).update({
+      'liveTypingEnabled': enabled,
+    });
+  }
+
+  Stream<bool> getLiveTypingSetting() {
+    final uid = currentUserId;
+    if (uid.isEmpty) return Stream.value(true);
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((d) => d.data()?['liveTypingEnabled'] ?? true);
+  }
+
+  Future<bool> isOtherUserLiveTypingEnabled(String otherUid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(otherUid).get();
+      return doc.data()?['liveTypingEnabled'] ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // ==================== CONTACT SYNC (Email-based) ====================
+  Future<List<Map<String, String>>> getPhoneEmails() async {
+    try {
+      final perm = await FlutterContacts.permissions.request(PermissionType.read);
+      if (perm != PermissionStatus.granted) return [];
+
+      final contacts = await FlutterContacts.getAll(
+        properties: {ContactProperty.name, ContactProperty.email},
+      );
+
+      final list = <Map<String, String>>[];
+      for (var c in contacts) {
+        for (var e in c.emails) {
+          final email = e.address.trim().toLowerCase();
+          if (email.isNotEmpty && email.contains('@')) {
+            list.add({
+              'name': c.displayName.isEmpty ? 'Unknown' : c.displayName,
+              'email': email,
+            });
+          }
+        }
+      }
+      return list;
+    } catch (e) {
+      print('Contact sync error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> findMatchingContacts() async {
+    final emails = await getPhoneEmails();
+    if (emails.isEmpty) return [];
+
+    final uid = currentUserId;
+    final myEmail = _auth.currentUser?.email?.toLowerCase() ?? '';
+
+    // Fetch all users (we'll filter by email)
+    final usersSnap = await _firestore.collection('users').get();
+
+    // Map email -> user data
+    final userMap = <String, Map<String, dynamic>>{};
+    for (var doc in usersSnap.docs) {
+      final data = doc.data();
+      final email = (data['email'] ?? '').toString().toLowerCase();
+      if (email.isNotEmpty && email != myEmail && data['uid'] != uid) {
+        userMap[email] = data;
+      }
+    }
+
+    // Match
+    final matched = <Map<String, dynamic>>[];
+    final seenUids = <String>{};
+    for (var c in emails) {
+      final u = userMap[c['email']];
+      if (u != null && !seenUids.contains(u['uid'])) {
+        seenUids.add(u['uid'] as String);
+        matched.add({
+          'name': u['name'],
+          'email': u['email'],
+          'username': u['username'] ?? '',
+          'photoUrl': u['photoUrl'],
+          'uid': u['uid'],
+          'phoneName': c['name'],
+        });
+      }
+    }
+    return matched;
+  }
+
+  // ==================== BACKUP & RESTORE ====================
+  Future<Map<String, dynamic>> exportBackup() async {
+    final uid = currentUserId;
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    final userData = userDoc.data() ?? {};
+
+    // Get all chats
+    final chatsSnap = await _firestore
+        .collection('chats')
+        .where('participants', arrayContains: uid)
+        .get();
+
+    final chatsData = <Map<String, dynamic>>[];
+    int totalMessages = 0;
+
+    for (var chat in chatsSnap.docs) {
+      final chatData = chat.data();
+      // Get messages
+      final msgsSnap = await _firestore
+          .collection('chats')
+          .doc(chat.id)
+          .collection('messages')
+          .get();
+
+      final msgs = <Map<String, dynamic>>[];
+      for (var m in msgsSnap.docs) {
+        msgs.add({'id': m.id, ...m.data()});
+      }
+      totalMessages += msgs.length;
+
+      chatsData.add({
+        'chatId': chat.id,
+        'chatData': chatData,
+        'messages': msgs,
+      });
+    }
+
+    // Contacts
+    final contactsSnap = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('contacts')
+        .get();
+    final contacts = contactsSnap.docs.map((d) => d.id).toList();
+
+    final backup = {
+      'version': 1,
+      'createdAt': DateTime.now().toIso8601String(),
+      'user': userData,
+      'contacts': contacts,
+      'chats': chatsData,
+      'stats': {
+        'totalChats': chatsData.length,
+        'totalMessages': totalMessages,
+      },
+    };
+
+    // Save backup metadata + full data in Firestore
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('backups')
+        .doc('latest')
+        .set(backup);
+
+    // Update user with backup info
+    await _firestore.collection('users').doc(uid).update({
+      'backup': {
+        'lastBackup': DateTime.now().toIso8601String(),
+        'totalChats': chatsData.length,
+        'totalMessages': totalMessages,
+      }
+    });
+
+    return backup;
+  }
+
+  Future<int> restoreBackup() async {
+    final uid = currentUserId;
+    final doc = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('backups')
+        .doc('latest')
+        .get();
+
+    if (!doc.exists) return 0;
+    final data = doc.data();
+    if (data == null) return 0;
+
+    final chats = (data['chats'] as List<dynamic>? ?? []);
+    int restored = 0;
+
+    for (var chatEntry in chats) {
+      final chatId = chatEntry['chatId'] as String;
+      final chatData = Map<String, dynamic>.from(chatEntry['chatData'] ?? {});
+      final msgs = (chatEntry['messages'] as List<dynamic>? ?? []);
+
+      // Ensure chat exists
+      final chatRef = _firestore.collection('chats').doc(chatId);
+      final existing = await chatRef.get();
+      if (!existing.exists) {
+        await chatRef.set(chatData);
+      }
+
+      // Write messages in batches (Firestore has 500 write limit per batch)
+      final messagesRef = chatRef.collection('messages');
+      for (var m in msgs) {
+        final msgId = m['id'] as String?;
+        if (msgId == null) continue;
+        final msgData = Map<String, dynamic>.from(m)..remove('id');
+        await messagesRef.doc(msgId).set(msgData);
+        restored++;
+      }
+    }
+
+    // Restore contacts
+    final contacts = (data['contacts'] as List<dynamic>? ?? []);
+    for (var cid in contacts) {
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('contacts')
+          .doc(cid as String)
+          .set({
+        'uid': cid,
+        'addedAt': DateTime.now().toIso8601String(),
+      });
+    }
+
+    return restored;
+  }
+
+  Stream<Map<String, dynamic>?> getBackupInfo() {
+    final uid = currentUserId;
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((d) => d.data()?['backup'] as Map<String, dynamic>?);
   }
 }

@@ -14,6 +14,7 @@ class UserModel {
   final bool readReceipts;
   final bool lastSeenVisible;
   final String preferredLanguage;
+  final bool liveTypingEnabled;
 
   UserModel({
     required this.uid,
@@ -29,6 +30,7 @@ class UserModel {
     this.readReceipts = true,
     this.lastSeenVisible = true,
     this.preferredLanguage = 'en',
+    this.liveTypingEnabled = true,
   });
 
   Map<String, dynamic> toMap() {
@@ -46,6 +48,7 @@ class UserModel {
       'readReceipts': readReceipts,
       'lastSeenVisible': lastSeenVisible,
       'preferredLanguage': preferredLanguage,
+      'liveTypingEnabled': liveTypingEnabled,
     };
   }
 
@@ -66,6 +69,7 @@ class UserModel {
       readReceipts: map['readReceipts'] ?? true,
       lastSeenVisible: map['lastSeenVisible'] ?? true,
       preferredLanguage: map['preferredLanguage'] ?? 'en',
+      liveTypingEnabled: map['liveTypingEnabled'] ?? true,
     );
   }
 }

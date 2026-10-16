@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -49,6 +50,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final _translationService = TranslationService();
 
   MessageModel? _replyTo;
+  Timer? _typingTimer;
+  bool _liveTypingOn = true;
+  String? _otherTypingText;
+  String? _otherUserId;
   bool _recording = false;
   bool _chatLocked = false;
   bool _unlocked = false;
@@ -71,6 +76,47 @@ class _ChatScreenState extends State<ChatScreen> {
     _checkLock();
     _startWorker();
     _loadLanguage();
+    _loadOtherUserId();
+    _loadLiveTypingSetting();
+  }
+
+  Future<void> _loadOtherUserId() async {
+    try {
+      final u = await _chatService.getOtherUser(widget.chatId);
+      if (u != null && mounted) {
+        setState(() => _otherUserId = u.uid);
+        _listenOtherTyping();
+      }
+    } catch (_) {}
+  }
+
+  void _listenOtherTyping() {
+    if (_otherUserId == null) return;
+    _chatService.listenOtherUserTyping(widget.chatId, _otherUserId!).listen((txt) {
+      if (!mounted) return;
+      setState(() => _otherTypingText = txt);
+    });
+  }
+
+  Future<void> _loadLiveTypingSetting() async {
+    try {
+      final user = await _chatService.getCurrentUser().first;
+      if (user != null && mounted) {
+        setState(() => _liveTypingOn = user.liveTypingEnabled);
+      }
+    } catch (_) {}
+  }
+
+  void _onMessageChanged(String text) {
+    if (!_liveTypingOn) return;
+    _typingTimer?.cancel();
+    if (text.trim().isEmpty) {
+      _chatService.clearTypingStatus(widget.chatId);
+      return;
+    }
+    _typingTimer = Timer(const Duration(milliseconds: 400), () {
+      _chatService.updateTypingStatus(widget.chatId, text);
+    });
   }
 
   Future<void> _loadLanguage() async {
@@ -912,80 +958,103 @@ class _ChatScreenState extends State<ChatScreen> {
 
   List<MessageModel> _allMsgs = [];
 
-  PreferredSizeWidget _normalAppBar() {
-    final hasImg = widget.otherUserPhoto != null &&
-        widget.otherUserPhoto!.isNotEmpty &&
-        (widget.otherUserPhoto!.startsWith('data:image') ||
-            widget.otherUserPhoto!.startsWith('http'));
-
+  PreferredSizeWidget _buildNormalAppBar(bool hasImage) {
     return AppBar(
-      backgroundColor: const Color(0xFF2196F3),
+      backgroundColor: const Color(0xFF5B4DFF),
       elevation: 0,
       scrolledUnderElevation: 0,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF4A90E2), Color(0xFF2196F3)],
-          ),
-        ),
-      ),
       titleSpacing: 0,
       iconTheme: const IconThemeData(color: Colors.white),
       title: Row(
         children: [
-          GestureDetector(
-            onTap: isGroupChat ? _showGroupInfo : null,
-            child: Stack(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.5),
-                  ),
-                  child: ClipOval(
-                    child: hasImg
-                        ? (widget.otherUserPhoto!.startsWith('data:image')
-                            ? Image.memory(
-                                base64Decode(
-                                    widget.otherUserPhoto!.split(',').last),
-                                fit: BoxFit.cover)
-                            : CachedNetworkImage(
-                                imageUrl: widget.otherUserPhoto!,
-                                fit: BoxFit.cover,
-                                errorWidget: (c, u, e) =>
-                                    _avFallback(widget.otherUserName),
-                              ))
-                        : isGroupChat
-                            ? Container(
-                                color: Colors.white.withOpacity(0.25),
-                                child: const Icon(Icons.group,
-                                    color: Colors.white, size: 22),
-                              )
-                            : _avFallback(widget.otherUserName),
+          const SizedBox(width: 8),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 16),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Stack(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: ClipOval(
+                  child: hasImage
+                      ? (widget.otherUserPhoto!.startsWith('data:image')
+                          ? Image.memory(
+                              _decodeBase64(widget.otherUserPhoto!),
+                              fit: BoxFit.cover)
+                          : CachedNetworkImage(
+                              imageUrl: widget.otherUserPhoto!,
+                              fit: BoxFit.cover,
+                              errorWidget: (c, u, e) =>
+                                  _avFallback(widget.otherUserName),
+                            ))
+                      : isGroupChat
+                          ? Container(
+                              color: Colors.white.withOpacity(0.25),
+                              child: const Icon(Icons.group,
+                                  color: Colors.white, size: 20),
+                            )
+                          : _avFallback(widget.otherUserName),
+                ),
+              ),
+              if (!isGroupChat)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF22C55E),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.otherUserName,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(widget.otherUserName,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.verified,
+                        color: Color(0xFFB8D4FF), size: 15),
+                  ],
+                ),
                 Text(
                   isGroupChat ? 'Tap for group info' : 'Online',
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.85), fontSize: 12.5),
+                      color: const Color(0xFFB8D4FF).withOpacity(0.9),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -995,9 +1064,9 @@ class _ChatScreenState extends State<ChatScreen> {
       actions: [
         if (!isGroupChat) ...[
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
             child: IconButton(
@@ -1005,11 +1074,11 @@ class _ChatScreenState extends State<ChatScreen> {
               onPressed: () => _startCall('video'),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
             child: IconButton(
@@ -1017,74 +1086,265 @@ class _ChatScreenState extends State<ChatScreen> {
               onPressed: () => _startCall('audio'),
             ),
           ),
+          const SizedBox(width: 6),
         ],
         PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child:
+                const Icon(Icons.more_vert, color: Colors.white, size: 20),
+          ),
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18)),
           onSelected: (v) async {
-            if (v == 'schedule') {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          ScheduleMessageScreen(chatId: widget.chatId)));
-            }
-            if (v == 'lock') {
-              if (_chatLocked) {
-                final r = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => PinSetupScreen(
-                            chatId: widget.chatId,
-                            chatName: widget.otherUserName,
-                            isRemoving: true)));
-                if (r == true && mounted) {
-                  setState(() {
-                    _chatLocked = false;
-                    _unlocked = true;
-                  });
+            switch (v) {
+              case 'view_contact': _showContactInfo(); break;
+              case 'media': _showMediaInfo(); break;
+              case 'search': _showSearchInChat(); break;
+              case 'disappearing': _showDisappearingOptions(); break;
+              case 'lock':
+                if (_chatLocked) {
+                  final r = await Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => PinSetupScreen(
+                      chatId: widget.chatId,
+                      chatName: widget.otherUserName,
+                      isRemoving: true,
+                    ),
+                  ));
+                  if (r == true && mounted) {
+                    setState(() { _chatLocked = false; _unlocked = true; });
+                  }
+                } else {
+                  final r = await Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => PinSetupScreen(
+                      chatId: widget.chatId,
+                      chatName: widget.otherUserName,
+                    ),
+                  ));
+                  if (r == true && mounted) {
+                    setState(() => _chatLocked = true);
+                  }
                 }
-              } else {
-                final r = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => PinSetupScreen(
-                            chatId: widget.chatId,
-                            chatName: widget.otherUserName)));
-                if (r == true && mounted) {
-                  setState(() => _chatLocked = true);
-                }
-              }
+                break;
+              case 'schedule':
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ScheduleMessageScreen(chatId: widget.chatId),
+                ));
+                break;
+              case 'mute': _snackCall('Notifications muted'); break;
+              case 'clear': _clearChat(); break;
+              case 'block': _blockUser(); break;
+              case 'report': _reportUser(); break;
+              case 'group_info': _showGroupInfo(); break;
             }
-            if (v == 'group_info' && isGroupChat) _showGroupInfo();
           },
           itemBuilder: (ctx) => [
-            const PopupMenuItem(
-                value: 'schedule',
-                child: Row(children: [
-                  Icon(Icons.schedule, size: 20),
-                  SizedBox(width: 12),
-                  Text('Schedule'),
-                ])),
-            PopupMenuItem(
-                value: 'lock',
-                child: Row(children: [
-                  Icon(_chatLocked ? Icons.lock_open : Icons.lock, size: 20),
-                  const SizedBox(width: 12),
-                  Text(_chatLocked ? 'Remove lock' : 'Lock chat'),
-                ])),
+            _menuItem('view_contact', Icons.person_outline, 'View contact'),
+            _menuItem('media', Icons.photo_library_outlined, 'Media, links, docs'),
+            _menuItem('search', Icons.search, 'Search in chat'),
+            _menuItem('disappearing', Icons.timer_outlined, 'Disappearing messages'),
+            _menuItem('lock',
+                _chatLocked ? Icons.lock_open : Icons.lock_outline,
+                _chatLocked ? 'Remove lock' : 'Lock chat'),
+            _menuItem('schedule', Icons.schedule, 'Schedule message'),
+            _menuItem('mute', Icons.notifications_off_outlined, 'Mute notifications'),
             if (isGroupChat)
-              const PopupMenuItem(
-                  value: 'group_info',
-                  child: Row(children: [
-                    Icon(Icons.info_outline, size: 20),
-                    SizedBox(width: 12),
-                    Text('Group info'),
-                  ])),
+              _menuItem('group_info', Icons.info_outline, 'Group info'),
+            _menuItem('clear', Icons.cleaning_services_outlined, 'Clear chat'),
+            if (!isGroupChat)
+              _menuItem('block', Icons.block, 'Block user', color: Colors.red),
+            _menuItem('report', Icons.flag_outlined, 'Report', color: Colors.red),
           ],
         ),
+        const SizedBox(width: 6),
       ],
     );
   }
+
+  PopupMenuItem<String> _menuItem(String v, IconData i, String l,
+      {Color? color}) =>
+      PopupMenuItem(
+        value: v,
+        child: Row(
+          children: [
+            Icon(i, size: 20, color: color ?? const Color(0xFF1A1A2E)),
+            const SizedBox(width: 14),
+            Text(l,
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: color ?? const Color(0xFF1A1A2E))),
+          ],
+        ),
+      );
+
+  void _showContactInfo() async {
+    final u = await _chatService.getOtherUser(widget.chatId);
+    if (u == null || !mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Contact info'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Name: ${u.name}'),
+            const SizedBox(height: 6),
+            Text('Username: @${u.username}'),
+            if (u.email.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Email: ${u.email}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  void _showMediaInfo() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Media, links and docs',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                children: List.generate(
+                    6,
+                    (i) => Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF5B4DFF).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.image_outlined,
+                              color: Color(0xFF5B4DFF), size: 30),
+                        )),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSearchInChat() {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Search in chat'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Type to search...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final q = ctrl.text.trim();
+              Navigator.pop(ctx);
+              if (q.isNotEmpty) _snackCall('Searching "$q"');
+            },
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5B4DFF),
+                foregroundColor: Colors.white),
+            child: const Text('Search'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearChat() async {
+    final c = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Clear chat?'),
+        content: const Text('All messages will be removed for you only.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (c == true) _snackCall('Chat cleared');
+  }
+
+  Future<void> _blockUser() async {
+    final u = await _chatService.getOtherUser(widget.chatId);
+    if (u == null) return;
+    final c = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Block ${u.name}?'),
+        content: const Text('Blocked contacts cannot message you.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Block', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (c == true) {
+      await _chatService.blockUser(u.uid);
+      if (mounted) _snackCall('User blocked');
+    }
+  }
+
+  Future<void> _reportUser() async {
+    final u = await _chatService.getOtherUser(widget.chatId);
+    if (u == null) return;
+    final c = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Report ${u.name}?'),
+        content: const Text('Report this user for spam or abuse?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Report', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (c == true) {
+      await _chatService.reportUser(u.uid, 'User reported');
+      if (mounted) _snackCall('User reported. Thank you!');
+    }
+  }
+
 
   Widget _avFallback(String name) {
     return Container(

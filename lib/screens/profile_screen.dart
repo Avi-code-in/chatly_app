@@ -1,23 +1,13 @@
-import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/chat_service.dart';
-import '../services/translation_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/user_model.dart';
-import '../theme.dart';
 import 'auth_screen.dart';
-import 'contact_requests_screen.dart';
-import 'privacy_settings_screen.dart';
-import 'blocked_users_screen.dart';
-import '../widgets/full_screen_image.dart';
-import 'contact_tags_screen.dart';
-import 'broadcast_screen.dart';
-import 'auto_reply_screen.dart';
+import 'contact_sync_screen.dart';
 import 'backup_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -33,154 +23,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploading = false;
 
   Future<void> _pickProfilePhoto() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
+    final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       maxWidth: 800,
       maxHeight: 800,
       imageQuality: 75,
     );
     if (picked == null) return;
-
     setState(() => _uploading = true);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: AppColors.primary),
-                SizedBox(height: 16),
-                Text('Uploading...'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
+    _showLoader();
     final url = await _cloudinary.uploadImage(File(picked.path));
     if (mounted) Navigator.pop(context);
-
     if (url != null) {
       await _service.updateProfilePicture(url);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile photo updated!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (mounted) _snack('Profile photo updated!', Colors.green);
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Upload failed. Check Cloudinary preset.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) _snack('Upload failed', Colors.red);
     }
-
     if (mounted) setState(() => _uploading = false);
   }
 
-  Future<void> _editName(UserModel user) async {
-    final controller = TextEditingController(text: user.name);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Name'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter your name',
-            border: OutlineInputBorder(),
+  void _showLoader() => showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Color(0xFF5B4DFF)),
+                  SizedBox(height: 16),
+                  Text('Uploading...'),
+                ],
+              ),
+            ),
           ),
-          autofocus: true,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (newName != null && newName.isNotEmpty) {
-      await _service.updateName(newName);
-    }
-  }
+      );
 
-  Future<void> _editAbout(String currentAbout) async {
-    final controller = TextEditingController(text: currentAbout);
-    final newAbout = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit About'),
-        content: TextField(
-          controller: controller,
-          maxLength: 139,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Write something about yourself',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (newAbout != null) {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .update({'about': newAbout});
-      }
-    }
-  }
+  void _snack(String m, Color c) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
 
-  void _showAccountInfo(UserModel user) {
+  void _showAboutDialog(UserModel user) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Account Info'),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('About'),
+        content: const Text('Hey there! I am using Chatly 💬'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAccountDialog(UserModel user) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Account'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _infoRow('Name', user.name),
-            const SizedBox(height: 12),
-            _infoRow('Email', user.email.isEmpty ? 'Not set' : user.email),
-            const SizedBox(height: 12),
-            _infoRow('Phone', user.phone.isEmpty ? 'Not set' : user.phone),
-            const SizedBox(height: 12),
-            _infoRow('User ID', user.uid.substring(0, 12)),
+            _row('Name', user.name),
+            _row('Email', user.email.isEmpty ? '—' : user.email),
+            _row('Phone', user.phone.isEmpty ? '—' : user.phone),
+            _row('Username', user.username.isEmpty ? '—' : '@${user.username}'),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),
           ),
         ],
@@ -188,250 +109,109 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _infoRow(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
+  Widget _row(String k, String v) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 80,
+              child: Text(k,
+                  style: const TextStyle(
+                      color: Color(0xFF8F92A1), fontSize: 12.5)),
+            ),
+            Expanded(
+              child: Text(v,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF1A1A2E))),
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 15,
-          ),
-        ),
-      ],
-    );
-  }
+      );
 
-  void _showNotificationSettings() {
-    showModalBottomSheet(
+  void _showNotificationsDialog() {
+    showDialog(
       context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          bool messageNotif = true;
-          bool groupNotif = true;
-          bool callNotif = true;
-          bool sound = true;
-          bool vibration = true;
-
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: const Text('Message notifications'),
-                    value: messageNotif,
-                    activeColor: AppColors.primary,
-                    onChanged: (v) => setModalState(() => messageNotif = v),
-                  ),
-                  SwitchListTile(
-                    title: const Text('Group notifications'),
-                    value: groupNotif,
-                    activeColor: AppColors.primary,
-                    onChanged: (v) => setModalState(() => groupNotif = v),
-                  ),
-                  SwitchListTile(
-                    title: const Text('Call notifications'),
-                    value: callNotif,
-                    activeColor: AppColors.primary,
-                    onChanged: (v) => setModalState(() => callNotif = v),
-                  ),
-                  const Divider(),
-                  SwitchListTile(
-                    title: const Text('Sound'),
-                    value: sound,
-                    activeColor: AppColors.primary,
-                    onChanged: (v) => setModalState(() => sound = v),
-                  ),
-                  SwitchListTile(
-                    title: const Text('Vibration'),
-                    value: vibration,
-                    activeColor: AppColors.primary,
-                    onChanged: (v) => setModalState(() => vibration = v),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            ),
-          );
-        },
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Notifications'),
+        content: StatefulBuilder(
+          builder: (ctx, setSt) {
+            bool messages = true, groups = true, calls = true;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Messages'),
+                  value: messages,
+                  activeColor: const Color(0xFF5B4DFF),
+                  onChanged: (v) => setSt(() => messages = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Groups'),
+                  value: groups,
+                  activeColor: const Color(0xFF5B4DFF),
+                  onChanged: (v) => setSt(() => groups = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Calls'),
+                  value: calls,
+                  activeColor: const Color(0xFF5B4DFF),
+                  onChanged: (v) => setSt(() => calls = v),
+                ),
+              ],
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
       ),
     );
   }
 
-  void _showStorageInfo() {
-    showModalBottomSheet(
+  void _showPremiumDialog() {
+    showDialog(
       context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.workspace_premium, color: Color(0xFF7C4DFF)),
+            SizedBox(width: 10),
+            Text('Chatly Premium'),
+          ],
+        ),
+        content: const Text(
+            'More features. Better experience.\n\nComing soon with exclusive themes, unlimited media sharing, and more!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Maybe Later'),
+          ),
+        ],
       ),
-      isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final service = ChatService();
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Storage & Data',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  FutureBuilder<Map<String, int>>(
-                    future: service.getStorageStats(),
-                    builder: (context, snap) {
-                      if (!snap.hasData) {
-                        return const Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Center(child: CircularProgressIndicator(color: Color(0xFF2196F3))),
-                        );
-                      }
-                      final stats = snap.data!;
-                      return Column(
-                        children: [
-                          _storageRow(Icons.image, 'Images', '${stats['images']} items'),
-                          const SizedBox(height: 12),
-                          _storageRow(Icons.videocam, 'Videos', '${stats['videos']} items'),
-                          const SizedBox(height: 12),
-                          _storageRow(Icons.insert_drive_file, 'Documents', '${stats['docs']} items'),
-                          const SizedBox(height: 12),
-                          _storageRow(Icons.mic, 'Voice', '${stats['voice']} items'),
-                          const SizedBox(height: 12),
-                          _storageRow(Icons.summarize, 'Total', '${stats['total']} messages'),
-                        ],
-                      );
-                    },
-                  ),
-                  const Divider(height: 32),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.delete_sweep, color: Colors.red),
-                    title: const Text('Clear cache'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Cache cleared!')),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _storageRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 13,
-          ),
-        ),
-      ],
     );
   }
 
   void _showHelpDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Help & Support'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Need help? We\'re here for you!'),
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.email, color: AppColors.primary),
-              title: const Text('Email us'),
-              subtitle: const Text('support@chatly.app'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Opening email...')),
-                );
-              },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.question_answer, color: AppColors.primary),
-              title: const Text('FAQs'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('FAQs coming soon')),
-                );
-              },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.bug_report, color: AppColors.primary),
-              title: const Text('Report a problem'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Report sent!')),
-                );
-              },
-            ),
-          ],
-        ),
+        content: const Text('Need help?\n\nEmail: support@chatly.app'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),
           ),
         ],
@@ -439,99 +219,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
-  void _showLanguageDialog(BuildContext context) {
-    final chatService = ChatService();
-    showDialog(
-      context: context,
-      builder: (context) => StreamBuilder<UserModel?>(
-        stream: chatService.getCurrentUser(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData || snapshot.data == null) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF2196F3)),
-            );
-          }
-          final user = snapshot.data!;
-          String selected = user.preferredLanguage;
-
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return AlertDialog(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-                title: const Row(
-                  children: [
-                    Icon(Icons.language, color: Color(0xFF2196F3)),
-                    SizedBox(width: 10),
-                    Text('Your Language'),
-                  ],
-                ),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  height: 400,
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: TranslationService.languages.length,
-                    itemBuilder: (context, i) {
-                      final entry =
-                          TranslationService.languages.entries.elementAt(i);
-                      return RadioListTile<String>(
-                        value: entry.key,
-                        groupValue: selected,
-                        activeColor: const Color(0xFF2196F3),
-                        title: Text(entry.value),
-                        onChanged: (v) async {
-                          if (v != null) {
-                            setDialogState(() => selected = v);
-                            await chatService.updatePreferredLanguage(v);
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
+    final c = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Log Out?'),
         content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Log Out',
-              style: TextStyle(color: Colors.red),
-            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Log Out', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-    if (confirm == true) {
+    if (c == true) {
       await _service.signOut();
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const AuthScreen()),
-          (route) => false,
+          (r) => false,
         );
       }
     }
@@ -542,171 +253,213 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return SafeArea(
       child: StreamBuilder<UserModel?>(
         stream: _service.getCurrentUser(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData || snapshot.data == null) {
+        builder: (ctx, snap) {
+          if (!snap.hasData || snap.data == null) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            );
+                child:
+                    CircularProgressIndicator(color: Color(0xFF5B4DFF)));
           }
-          final user = snapshot.data!;
-          return _buildProfile(user);
+          return _body(snap.data!);
         },
       ),
     );
   }
 
-  Widget _buildProfile(UserModel user) {
-    final hasImage = user.photoUrl != null &&
+  Widget _body(UserModel user) {
+    final hasImg = user.photoUrl != null &&
+        user.photoUrl!.isNotEmpty &&
         (user.photoUrl!.startsWith('data:image') ||
             user.photoUrl!.startsWith('http'));
 
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // Top Header with Gradient
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+    return Stack(
+      children: [
+        // Background orbs
+        Positioned(
+          top: -80,
+          right: -60,
+          child: Container(
+            width: 200,
+            height: 200,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.primary.withOpacity(0.15),
-                  AppColors.primaryLight.withOpacity(0.25),
-                ],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(36),
-                bottomRight: Radius.circular(36),
-              ),
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                const Color(0xFFD5DDFF).withOpacity(0.6),
+                Colors.transparent,
+              ]),
             ),
-            child: Column(
-              children: [
-                Row(
+          ),
+        ),
+
+        SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 200),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ==================== HEADER ====================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
+                child: Row(
                   children: [
-                    const Text(
-                      'Profile',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Profile',
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0B1F3A),
+                              letterSpacing: -0.5,
+                            )),
+                        const SizedBox(height: 2),
+                        Text('Your personal space',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black.withOpacity(0.5),
+                            )),
+                        const SizedBox(height: 6),
+                        Container(
+                          width: 40,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [
+                              Color(0xFF5B4DFF),
+                              Color(0xFF7C4DFF)
+                            ]),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ],
                     ),
                     const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.more_vert,
-                          color: AppColors.textPrimary),
-                      onPressed: () {},
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.06),
+                              blurRadius: 10),
+                        ],
+                      ),
+                      child: const Icon(Icons.settings_outlined,
+                          color: Color(0xFF0B1F3A), size: 22),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                // Avatar with edit button
-                GestureDetector(
-                  onTap: _pickProfilePhoto,
-                  child: Stack(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: hasImage ? null : AppTheme.blueGradient,
+              ),
+
+              const SizedBox(height: 24),
+
+              // ==================== AVATAR + INFO ====================
+              Center(
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 130,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF5B4DFF), Color(0xFF7C4DFF)],
                         ),
-                        child: CircleAvatar(
-                          radius: 55,
-                          backgroundColor: AppColors.white,
-                          backgroundImage: hasImage
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF5B4DFF).withOpacity(0.35),
+                            blurRadius: 30,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                        padding: const EdgeInsets.all(3),
+                        child: ClipOval(
+                          child: hasImg
                               ? (user.photoUrl!.startsWith('data:image')
-                                  ? MemoryImage(_decodeBase64(user.photoUrl!)) as ImageProvider
-                                  : NetworkImage(user.photoUrl!) as ImageProvider)
-                              : null,
-                          child: !hasImage
-                              ? Text(
-                                  user.name.isNotEmpty
-                                      ? user.name[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 42,
-                                  ),
-                                )
-                              : null,
+                                  ? Image.memory(
+                                      _b64(user.photoUrl!),
+                                      fit: BoxFit.cover)
+                                  : CachedNetworkImage(
+                                      imageUrl: user.photoUrl!,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (c, u, e) =>
+                                          _fallback(user.name)))
+                              : _fallback(user.name),
                         ),
                       ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
+                    ),
+                    Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: _pickProfilePhoto,
                         child: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            gradient: AppTheme.blueGradient,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF5B4DFF), Color(0xFF7C4DFF)],
+                            ),
                             shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withOpacity(0.4),
-                                blurRadius: 10,
-                              ),
-                            ],
+                            border: Border.all(color: Colors.white, width: 3),
                           ),
                           child: _uploading
                               ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
+                                  width: 16,
+                                  height: 16,
                                   child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.camera_alt,
+                                  color: Colors.white, size: 18),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Name
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      user.name,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => _editName(user),
-                      child: const Icon(
-                        Icons.edit,
-                        size: 18,
-                        color: AppColors.primary,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  user.phone.isNotEmpty ? user.phone : user.email,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                  ),
+              ),
+
+              const SizedBox(height: 18),
+
+              // Name + verified icon
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(user.name,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0B1F3A),
+                        )),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.edit,
+                        size: 16, color: Color(0xFF5B4DFF)),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                // Online status chip
-                Container(
+              ),
+
+              const SizedBox(height: 6),
+              Center(
+                child: Text(user.email.isEmpty ? '@${user.username}' : user.email,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.black.withOpacity(0.55),
+                    )),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Online pill
+              Center(
+                child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 6),
+                      horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.online.withOpacity(0.12),
+                    color: const Color(0xFF4ADE80).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -716,243 +469,259 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         width: 8,
                         height: 8,
                         decoration: const BoxDecoration(
-                          color: AppColors.online,
+                          color: Color(0xFF22C55E),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Online',
-                        style: TextStyle(
-                          color: AppColors.online,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      const SizedBox(width: 8),
+                      const Text('Online',
+                          style: TextStyle(
+                            color: Color(0xFF16A34A),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                          )),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
+              ),
 
-          // Menu Options
-          _menuItem(
-            Icons.info_outline,
-            'About',
-            'Hey there! I am using Chatly',
-            () => _editAbout('Hey there! I am using Chatly'),
-          ),
-          _menuItem(
-            Icons.person_outline,
-            'Account',
-            'Name, email, phone, user ID',
-            () => _showAccountInfo(user),
-          ),
-          _menuItem(
-            Icons.notifications_outlined,
-            'Notifications',
-            'Messages, groups, calls',
-            _showNotificationSettings,
-          ),
-          _menuItem(
-            Icons.storage_outlined,
-            'Storage & Data',
-            'Network usage, auto-download',
-            _showStorageInfo,
-          ),
-          _menuItem(
-            Icons.help_outline,
-            'Help & Support',
-            'FAQ, contact us, report',
-            _showHelpDialog,
-          ),
-          _menuItem(
-            Icons.label_outline,
-            'Contact Tags',
-            'Organize contacts by tags',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactTagsScreen())),
-          ),
-          _menuItem(
-            Icons.campaign_outlined,
-            'Broadcast Lists',
-            'Send to many at once',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BroadcastScreen())),
-          ),
-          _menuItem(
-            Icons.smart_toy,
-            'Auto-Reply',
-            'Auto respond when busy',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AutoReplyScreen())),
-          ),
-          _menuItem(
-            Icons.cloud_upload,
-            'Chat Backup',
-            'Backup chats and media',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen())),
-          ),
-          _menuItem(
-            Icons.person_add,
-            'Contact Requests',
-            'Accept or decline requests',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactRequestsScreen())),
-          ),
-          _menuItem(
-            Icons.language,
-            'Language',
-            'Your preferred language for translation',
-            () => _showLanguageDialog(context),
-          ),
-          _menuItem(
-            Icons.privacy_tip_outlined,
-            'Privacy & Safety',
-            'Who can message, block list',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacySettingsScreen())),
-          ),
-          _menuItem(
-            Icons.block,
-            'Blocked Users',
-            'Manage blocked contacts',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
-          ),
-          _menuItem(
-            Icons.share_outlined,
-            'Invite a Friend',
-            'Share Chatly with others',
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Invite feature coming soon')),
-              );
-            },
-          ),
+              const SizedBox(height: 32),
 
-          const SizedBox(height: 20),
+              // ==================== MENU CARDS ====================
+              _menuCard(
+                icon: Icons.info_outline,
+                iconColor: const Color(0xFF4A90E2),
+                iconBg: const Color(0xFFE8F0FF),
+                title: 'About',
+                subtitle: 'Hey there! I am using Chatly',
+                onTap: () => _showAboutDialog(user),
+              ),
+              _menuCard(
+                icon: Icons.person_outline,
+                iconColor: const Color(0xFF7C4DFF),
+                iconBg: const Color(0xFFEDE5FF),
+                title: 'Account',
+                subtitle: 'Name, email, phone, user ID',
+                onTap: () => _showAccountDialog(user),
+              ),
+              _menuCard(
+                icon: Icons.notifications_none_rounded,
+                iconColor: const Color(0xFF7C4DFF),
+                iconBg: const Color(0xFFEDE5FF),
+                title: 'Notifications',
+                subtitle: 'Messages, groups, calls',
+                onTap: _showNotificationsDialog,
+              ),
+              _menuCard(
+                icon: Icons.visibility_outlined,
+                iconColor: const Color(0xFF7C4DFF),
+                iconBg: const Color(0xFFEDE5FF),
+                title: 'Live Typing Preview',
+                subtitle: 'Show what you\'re typing to others',
+                onTap: () => _showLiveTypingDialog(),
+              ),
+              _menuCard(
+                icon: Icons.person_add_alt_1,
+                iconColor: const Color(0xFF22C55E),
+                iconBg: const Color(0xFFDCFCE7),
+                title: 'Find Friends',
+                subtitle: 'Sync contacts to find friends on Chatly',
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const ContactSyncScreen())),
+              ),
+              _menuCard(
+                icon: Icons.cloud_sync_outlined,
+                iconColor: const Color(0xFF7C4DFF),
+                iconBg: const Color(0xFFEDE5FF),
+                title: 'Backup & Restore',
+                subtitle: 'Backup your chats to cloud',
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const BackupScreen())),
+              ),
+              _menuCard(
+                icon: Icons.help_outline,
+                iconColor: const Color(0xFF4A90E2),
+                iconBg: const Color(0xFFE8F0FF),
+                title: 'Help & Support',
+                subtitle: 'FAQ, contact us',
+                onTap: _showHelpDialog,
+              ),
 
-          // Logout Button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: GestureDetector(
-              onTap: _logout,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.red.withOpacity(0.2),
-                    width: 1,
+              const SizedBox(height: 16),
+
+              // ==================== PREMIUM CARD ====================
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: GestureDetector(
+                  onTap: _showPremiumDialog,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFEDE5FF), Color(0xFFD5DDFF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF5B4DFF).withOpacity(0.15),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF5B4DFF), Color(0xFF7C4DFF)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.workspace_premium,
+                              color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Chatly Premium',
+                                  style: TextStyle(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0B1F3A),
+                                  )),
+                              SizedBox(height: 2),
+                              Text('More features. Better experience.',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: Color(0xFF5A6B8A),
+                                  )),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios,
+                            size: 14, color: Color(0xFF5B4DFF)),
+                      ],
+                    ),
                   ),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.logout, color: Colors.red, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Log Out',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Logout
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: GestureDetector(
+                  onTap: _logout,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: Colors.red.withOpacity(0.15), width: 1),
                     ),
-                  ],
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout, color: Colors.red, size: 20),
+                        SizedBox(width: 10),
+                        Text('Log Out',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            )),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
+
+              const SizedBox(height: 40),
+            ],
           ),
-          const SizedBox(height: 40),
-          const Center(
-            child: Text(
-              'Chatly v1.0.0',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _menuItem(
-    IconData icon,
-    String title,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withOpacity(0.15),
-                        AppColors.primaryLight.withOpacity(0.1),
+  Widget _menuCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0B1F3A),
+                            )),
+                        const SizedBox(height: 2),
+                        Text(subtitle,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: Color(0xFF8F92A1),
+                            )),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, color: AppColors.primary, size: 22),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: AppColors.textSecondary,
-                ),
-              ],
+                  const Icon(Icons.arrow_forward_ios,
+                      size: 13, color: Color(0xFF8F92A1)),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
 
-  Uint8List _decodeBase64(String dataUrl) {
-    final base64String = dataUrl.split(',').last;
-    return base64Decode(base64String);
-  }
+  Widget _fallback(String name) => Container(
+        color: const Color(0xFF5B4DFF),
+        child: Center(
+          child: Text(
+            name.isNotEmpty ? name[0].toUpperCase() : '?',
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 42,
+                fontWeight: FontWeight.w700),
+          ),
+        ),
+      );
+
+  Uint8List _b64(String d) => base64Decode(d.split(',').last);
 }

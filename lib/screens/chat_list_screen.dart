@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/chat_service.dart';
 import '../models/user_model.dart';
-import '../theme.dart';
 import 'new_chat_screen.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
@@ -31,14 +30,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
     ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: const Color(0xFFF5F6FF),
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2196F3).withOpacity(0.08),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
@@ -49,7 +48,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             currentIndex: _currentIndex,
             onTap: (i) => setState(() => _currentIndex = i),
             backgroundColor: Colors.transparent,
-            selectedItemColor: const Color(0xFF2196F3),
+            selectedItemColor: const Color(0xFF5B4DFF),
             unselectedItemColor: const Color(0xFF8F92A1),
             type: BottomNavigationBarType.fixed,
             elevation: 0,
@@ -95,91 +94,150 @@ class _ChatsTabState extends State<_ChatsTab> {
   @override
   void initState() {
     super.initState();
-    _chatService.getFavouriteUids().listen((faves) {
-      if (mounted) setState(() => _favouriteUids = faves.toSet());
+    _chatService.getFavouriteUids().listen((f) {
+      if (mounted) setState(() => _favouriteUids = f.toSet());
     });
-    // Process scheduled messages every minute
-    _startScheduledWorker();
+    _startWorker();
   }
 
-  void _startScheduledWorker() {
-    _chatService.processScheduledMessages();
+  void _startWorker() {
+    _chatService.processAllScheduledMessages();
     Future.delayed(const Duration(minutes: 1), () {
-      if (mounted) _startScheduledWorker();
+      if (mounted) _startWorker();
     });
   }
 
-  void _showUserOptions(UserModel user, bool isFav, bool isBlocked) {
+  void _showUserOptions(UserModel u, bool isFav, bool isBlocked) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => SafeArea(
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(24)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
             ListTile(
               leading: CircleAvatar(
-                radius: 22,
-                backgroundColor: const Color(0xFF2196F3).withOpacity(0.15),
+                backgroundColor: const Color(0xFF5B4DFF).withOpacity(0.15),
                 child: Text(
-                  user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                  style: const TextStyle(color: Color(0xFF2196F3), fontWeight: FontWeight.bold),
+                  u.name.isNotEmpty ? u.name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                      color: Color(0xFF5B4DFF), fontWeight: FontWeight.bold),
                 ),
               ),
-              title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              subtitle: Text('@${user.username}', style: const TextStyle(color: Color(0xFF8F92A1), fontSize: 13)),
+              title: Text(u.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16)),
+              subtitle: Text('@${u.username}',
+                  style: const TextStyle(color: Color(0xFF8F92A1))),
             ),
             const Divider(),
             ListTile(
-              leading: Icon(isFav ? Icons.star : Icons.star_border, color: Colors.amber),
-              title: Text(isFav ? 'Remove from Favourites' : 'Add to Favourites'),
+              leading: Icon(isFav ? Icons.star : Icons.star_border,
+                  color: Colors.amber),
+              title:
+                  Text(isFav ? 'Remove from Favourites' : 'Add to Favourites'),
               onTap: () async {
-                await _chatService.toggleFavourite(user.uid);
-                if (context.mounted) Navigator.pop(context);
+                await _chatService.toggleFavourite(u.uid);
+                if (ctx.mounted) Navigator.pop(ctx);
               },
             ),
             ListTile(
-              leading: Icon(
-                isBlocked ? Icons.lock_open : Icons.block,
-                color: isBlocked ? const Color(0xFF2196F3) : Colors.red,
-              ),
-              title: Text(
-                isBlocked ? 'Unblock' : 'Block',
-                style: TextStyle(color: isBlocked ? const Color(0xFF2196F3) : Colors.red),
-              ),
+              leading: Icon(isBlocked ? Icons.lock_open : Icons.block,
+                  color: isBlocked ? const Color(0xFF5B4DFF) : Colors.red),
+              title: Text(isBlocked ? 'Unblock' : 'Block',
+                  style: TextStyle(
+                      color:
+                          isBlocked ? const Color(0xFF5B4DFF) : Colors.red)),
               onTap: () async {
                 if (isBlocked) {
-                  await _chatService.unblockUser(user.uid);
+                  await _chatService.unblockUser(u.uid);
                 } else {
-                  await _chatService.blockUser(user.uid);
+                  await _chatService.blockUser(u.uid);
                 }
-                if (context.mounted) Navigator.pop(context);
+                if (ctx.mounted) Navigator.pop(ctx);
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _handleTapChat(String chatId, UserModel user) async {
-    // Direct navigation - ChatScreen handles PIN/block internally
+  Future<void> _openChat(String chatId, UserModel u) async {
+    if (await _chatService.isBlocked(u.uid)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${u.name} is blocked'),
+          action: SnackBarAction(
+              label: 'Unblock',
+              onPressed: () => _chatService.unblockUser(u.uid)),
+        ));
+      }
+      return;
+    }
+    final hasPin = await _chatService.hasChatPin(chatId);
+    if (hasPin) {
+      final stored = await _chatService.getChatPin(chatId);
+      if (!mounted) return;
+      final entered = await _askPin();
+      if (entered != stored) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Wrong PIN'), backgroundColor: Colors.red));
+        }
+        return;
+      }
+    }
     if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           chatId: chatId,
-          otherUserName: user.name,
-          otherUserPhoto: user.photoUrl,
+          otherUserName: u.name,
+          otherUserPhoto: u.photoUrl,
         ),
+      ),
+    );
+  }
+
+  Future<String?> _askPin() async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Enter PIN'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          maxLength: 4,
+          obscureText: true,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+              fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
+          decoration: const InputDecoration(
+              counterText: '',
+              hintText: '----',
+              border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5B4DFF),
+                foregroundColor: Colors.white),
+            child: const Text('Unlock'),
+          ),
+        ],
       ),
     );
   }
@@ -189,97 +247,135 @@ class _ChatsTabState extends State<_ChatsTab> {
     return SafeArea(
       child: Stack(
         children: [
+          Positioned(
+            top: -80,
+            right: -60,
+            child: Container(
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [
+                  const Color(0xFFD5DDFF).withOpacity(0.7),
+                  Colors.transparent,
+                ]),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 200,
+            left: -60,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [
+                  const Color(0xFFE5D9FF).withOpacity(0.5),
+                  Colors.transparent,
+                ]),
+              ),
+            ),
+          ),
           Column(
             children: [
+              // HEADER
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Row(
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFFEEF1FF), Color(0xFFE0E6FF)]),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: IconButton(icon: const Icon(Icons.menu, color: Color(0xFF2196F3)), onPressed: () {}),
-                    ),
-                    const SizedBox(width: 14),
-                    const Text('Chatly', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF1A1A2E), letterSpacing: -0.5)),
+                    _squareBtn(Icons.menu, () {}),
+                    const SizedBox(width: 12),
+                    const Text('Chatly',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0B1F3A),
+                          letterSpacing: -1,
+                        )),
                     const Spacer(),
-                    _modernIconButton(Icons.search, () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatScreen()));
+                    _squareBtn(Icons.search, () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const NewChatScreen()));
                     }),
                     const SizedBox(width: 8),
-                    _modernIconButton(Icons.group_add, () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateGroupScreen()));
+                    _squareBtn(Icons.person_add_alt_1, () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const NewChatScreen()));
                     }),
                   ],
                 ),
               ),
+
+              // FILTER CHIPS
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
-                    _filterChip('All', 0),
+                    _chip('All', 0),
                     const SizedBox(width: 8),
-                    _filterChip('Unread', 1),
+                    _chip('Unread', 1),
                     const SizedBox(width: 8),
-                    _filterChip('Groups', 2),
+                    _chip('Groups', 2),
                     const SizedBox(width: 8),
-                    _filterChip('Favourites', 3),
+                    _chip('Favourites', 3),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+
+              const SizedBox(height: 12),
+
+              // LIST
               Expanded(
                 child: StreamBuilder<List<Map<String, dynamic>>>(
                   stream: _chatService.getChats(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator(color: Color(0xFF2196F3)));
+                  builder: (ctx, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                          child: CircularProgressIndicator(
+                              color: Color(0xFF5B4DFF)));
                     }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return _emptyState();
+                    if (!snap.hasData || snap.data!.isEmpty) {
+                      return _empty();
                     }
-
-                    var chats = snapshot.data!
-                        .where((chat) => (chat['lastMessage'] ?? '').toString().isNotEmpty)
+                    var list = snap.data!
+                        .where((c) =>
+                            (c['lastMessage'] ?? '').toString().isNotEmpty)
                         .toList();
-
                     if (_filterIndex == 2) {
-                      chats = chats.where((c) => c['isGroup'] == true).toList();
+                      list = list
+                          .where((c) => c['isGroup'] == true)
+                          .toList();
                     }
-
-                    if (chats.isEmpty) return _emptyState();
-
+                    if (list.isEmpty) return _empty();
                     return ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: chats.length,
-                      itemBuilder: (context, index) {
-                        final chatData = chats[index];
-                        final chatId = chatData['chatId'] as String;
-                        final isGroup = chatData['isGroup'] == true;
-                        final groupName = chatData['groupName'] ?? 'Group';
-
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      itemCount: list.length,
+                      itemBuilder: (ctx, i) {
+                        final d = list[i];
+                        final cid = d['chatId'] as String;
+                        final isGroup = d['isGroup'] == true;
                         if (isGroup) {
-                          return _groupTile(context, chatId, chatData, groupName);
+                          return _groupTile(cid, d, d['groupName'] ?? 'Group');
                         }
-
                         return FutureBuilder<UserModel?>(
-                          future: _chatService.getOtherUser(chatId),
-                          builder: (context, userSnapshot) {
-                            if (!userSnapshot.hasData || userSnapshot.data == null) {
+                          future: _chatService.getOtherUser(cid),
+                          builder: (ctx, us) {
+                            if (!us.hasData || us.data == null) {
                               return const SizedBox.shrink();
                             }
-                            final user = userSnapshot.data!;
-                            final isFav = _favouriteUids.contains(user.uid);
-
-                            // Filter favourite
-                            if (_filterIndex == 3 && !isFav) {
+                            final u = us.data!;
+                            final fav = _favouriteUids.contains(u.uid);
+                            if (_filterIndex == 3 && !fav) {
                               return const SizedBox.shrink();
                             }
-
-                            return _chatTile(context, chatId, chatData, user, isFav);
+                            return _chatTile(cid, d, u, fav);
                           },
                         );
                       },
@@ -289,39 +385,56 @@ class _ChatsTabState extends State<_ChatsTab> {
               ),
             ],
           ),
+          // Request FAB
           Positioned(
             right: 16,
             bottom: 90,
             child: StreamBuilder<int>(
               stream: _chatService.getPendingRequestCount(),
-              builder: (context, snap) {
-                final count = snap.data ?? 0;
-                if (count == 0) return const SizedBox.shrink();
+              builder: (ctx, s) {
+                final c = s.data ?? 0;
+                if (c == 0) return const SizedBox.shrink();
                 return GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactRequestsScreen())),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ContactRequestsScreen())),
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
                       Container(
-                        width: 54, height: 54,
+                        width: 50,
+                        height: 50,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFF2196F3), Color(0xFF1976D2)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                          color: Colors.white,
                           shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: const Color(0xFF2196F3).withOpacity(0.45), blurRadius: 16, offset: const Offset(0, 6))],
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withOpacity(0.08),
+                                blurRadius: 12),
+                          ],
                         ),
-                        child: const Icon(Icons.person_add, color: Colors.white, size: 24),
+                        child: const Icon(Icons.person_add,
+                            color: Color(0xFF5B4DFF), size: 22),
                       ),
                       Positioned(
-                        top: -4, right: -4,
+                        top: -4,
+                        right: -4,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                          padding: const EdgeInsets.all(5),
+                          constraints: const BoxConstraints(
+                              minWidth: 20, minHeight: 20),
                           decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(10),
+                            color: const Color(0xFF5B4DFF),
+                            shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
                           ),
-                          child: Text('$count', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: Text('$c',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -330,16 +443,32 @@ class _ChatsTabState extends State<_ChatsTab> {
               },
             ),
           ),
+          // Edit FAB
           Positioned(
-            right: 16, bottom: 20,
+            right: 16,
+            bottom: 20,
             child: GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatScreen())),
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const NewChatScreen())),
               child: Container(
-                width: 60, height: 60,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF2196F3), Color(0xFF1976D2)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF5B4DFF), Color(0xFF7C4DFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: const Color(0xFF2196F3).withOpacity(0.45), blurRadius: 20, offset: const Offset(0, 8))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF5B4DFF).withOpacity(0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
                 child: const Icon(Icons.edit, color: Colors.white, size: 26),
               ),
@@ -350,79 +479,140 @@ class _ChatsTabState extends State<_ChatsTab> {
     );
   }
 
-  Widget _modernIconButton(IconData icon, VoidCallback onTap) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFFEEF1FF), Color(0xFFE0E6FF)]),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: IconButton(icon: Icon(icon, color: const Color(0xFF2196F3)), onPressed: onTap),
-    );
-  }
+  Widget _squareBtn(IconData i, VoidCallback t) => GestureDetector(
+        onTap: t,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Icon(i, color: const Color(0xFF0B1F3A), size: 22),
+        ),
+      );
 
-  Widget _filterChip(String label, int index) {
-    final selected = _filterIndex == index;
+  Widget _chip(String t, int i) {
+    final s = _filterIndex == i;
     return GestureDetector(
-      onTap: () => setState(() => _filterIndex = index),
+      onTap: () => setState(() => _filterIndex = i),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          gradient: selected ? const LinearGradient(colors: [Color(0xFF2196F3), Color(0xFF1976D2)]) : null,
-          color: selected ? null : Colors.white,
+          gradient: s
+              ? const LinearGradient(colors: [
+                  Color(0xFF5B4DFF),
+                  Color(0xFF7C4DFF),
+                ])
+              : null,
+          color: s ? null : Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: selected ? [BoxShadow(color: const Color(0xFF2196F3).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))] : null,
+          boxShadow: [
+            BoxShadow(
+                color: s
+                    ? const Color(0xFF5B4DFF).withOpacity(0.3)
+                    : Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4)),
+          ],
         ),
-        child: Text(label, style: TextStyle(color: selected ? Colors.white : const Color(0xFF8F92A1), fontSize: 13, fontWeight: FontWeight.w700)),
+        child: Text(t,
+            style: TextStyle(
+              color: s ? Colors.white : const Color(0xFF5A6B8A),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            )),
       ),
     );
   }
 
-  Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [Color(0xFFEEF1FF), Color(0xFFE0E6FF)]),
-              shape: BoxShape.circle,
+  Widget _empty() => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [
+                  Color(0xFFEDE5FF),
+                  Color(0xFFD5DDFF),
+                ]),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.chat_bubble_outline,
+                  size: 55, color: Color(0xFF5B4DFF)),
             ),
-            child: const Icon(Icons.chat_bubble_outline, size: 60, color: Color(0xFF2196F3)),
-          ),
-          const SizedBox(height: 24),
-          const Text('No chats yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
-          const SizedBox(height: 8),
-          const Text('Start a new chat or create a group', style: TextStyle(fontSize: 14, color: Color(0xFF8F92A1))),
-        ],
-      ),
-    );
-  }
+            const SizedBox(height: 24),
+            const Text('No chats yet',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0B1F3A),
+                )),
+            const SizedBox(height: 8),
+            const Text('Start a new chat or create a group',
+                style: TextStyle(
+                    fontSize: 14, color: Color(0xFF8F92A1))),
+          ],
+        ),
+      );
 
-  Widget _groupTile(BuildContext context, String chatId, Map<String, dynamic> chatData, String groupName) {
-    final groupPhoto = chatData['groupPhoto'] as String?;
-    final hasPhoto = groupPhoto != null && groupPhoto.isNotEmpty;
-
-    return InkWell(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(chatId: chatId, otherUserName: groupName))),
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+  Widget _groupTile(String cid, Map<String, dynamic> d, String name) {
+    final photo = d['groupPhoto'] as String?;
+    final has = photo != null && photo.isNotEmpty;
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) =>
+                  ChatScreen(chatId: cid, otherUserName: name))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 3)),
+          ],
+        ),
         child: Row(
           children: [
             Container(
-              width: 56, height: 56,
+              width: 54,
+              height: 54,
               decoration: BoxDecoration(
-                gradient: hasPhoto ? null : const LinearGradient(colors: [Color(0xFF2196F3), Color(0xFF1976D2)]),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: const Color(0xFF2196F3).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 6))],
+                gradient: has
+                    ? null
+                    : const LinearGradient(colors: [
+                        Color(0xFF5B4DFF),
+                        Color(0xFF7C4DFF),
+                      ]),
+                borderRadius: BorderRadius.circular(18),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: hasPhoto
-                    ? _buildNetworkImage(groupPhoto)
-                    : const Icon(Icons.group, color: Colors.white, size: 28),
+                borderRadius: BorderRadius.circular(18),
+                child: has
+                    ? (photo.startsWith('data:image')
+                        ? Image.memory(_b64(photo), fit: BoxFit.cover)
+                        : CachedNetworkImage(
+                            imageUrl: photo,
+                            fit: BoxFit.cover,
+                            errorWidget: (c, u, e) => const Icon(Icons.group,
+                                color: Colors.white, size: 24),
+                          ))
+                    : const Icon(Icons.group,
+                        color: Colors.white, size: 24),
               ),
             ),
             const SizedBox(width: 14),
@@ -430,9 +620,20 @@ class _ChatsTabState extends State<_ChatsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(groupName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF1A1A2E))),
+                  Text(name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: Color(0xFF0B1F3A),
+                      )),
                   const SizedBox(height: 4),
-                  Text(chatData['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF8F92A1), fontSize: 14)),
+                  Text(d['lastMessage'] ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF8F92A1),
+                        fontSize: 14,
+                      )),
                 ],
               ),
             ),
@@ -442,24 +643,87 @@ class _ChatsTabState extends State<_ChatsTab> {
     );
   }
 
-  Widget _chatTile(BuildContext context, String chatId, Map<String, dynamic> chatData, UserModel user, bool isFav) {
-    final lastMessage = chatData['lastMessage'] ?? '';
-    final lastSender = chatData['lastMessageSender'] ?? '';
-    final isMe = lastSender == _chatService.currentUserId;
+  Widget _chatTile(String cid, Map<String, dynamic> d, UserModel u, bool fav) {
+    final last = d['lastMessage'] ?? '';
+    final sender = d['lastMessageSender'] ?? '';
+    final isMe = sender == _chatService.currentUserId;
+    final hasImg = u.photoUrl != null &&
+        u.photoUrl!.isNotEmpty &&
+        (u.photoUrl!.startsWith('data:image') ||
+            u.photoUrl!.startsWith('http'));
 
-    return InkWell(
-      onTap: () => _handleTapChat(chatId, user),
+    return GestureDetector(
+      onTap: () => _openChat(cid, u),
       onLongPress: () async {
-        final blocked = await _chatService.isBlocked(user.uid);
+        final blocked = await _chatService.isBlocked(u.uid);
         if (!mounted) return;
-        _showUserOptions(user, isFav, blocked);
+        _showUserOptions(u, fav, blocked);
       },
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 3)),
+          ],
+        ),
         child: Row(
           children: [
-            _avatar(user, 28),
+            Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: hasImg
+                        ? null
+                        : const LinearGradient(colors: [
+                            Color(0xFF5B4DFF),
+                            Color(0xFF7C4DFF),
+                          ]),
+                  ),
+                  child: CircleAvatar(
+                    radius: 26,
+                    backgroundColor: Colors.white,
+                    backgroundImage: hasImg
+                        ? (u.photoUrl!.startsWith('data:image')
+                            ? MemoryImage(_b64(u.photoUrl!))
+                            : CachedNetworkImageProvider(u.photoUrl!))
+                        : null,
+                    child: !hasImg
+                        ? Text(
+                            u.name.isNotEmpty
+                                ? u.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ))
+                        : null,
+                  ),
+                ),
+                if (u.isOnline)
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF22C55E),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2.5),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -471,16 +735,28 @@ class _ChatsTabState extends State<_ChatsTab> {
                         child: Row(
                           children: [
                             Flexible(
-                              child: Text(user.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF1A1A2E)), overflow: TextOverflow.ellipsis),
+                              child: Text(u.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                    color: Color(0xFF0B1F3A),
+                                  )),
                             ),
-                            if (isFav) ...[
-                              const SizedBox(width: 6),
-                              const Icon(Icons.star, size: 14, color: Colors.amber),
+                            if (fav) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.star,
+                                  size: 14, color: Colors.amber),
                             ],
                           ],
                         ),
                       ),
-                      Text(_formatTime(chatData['lastMessageTime']), style: const TextStyle(color: Color(0xFF8F92A1), fontSize: 12, fontWeight: FontWeight.w500)),
+                      Text(_fmtTime(d['lastMessageTime']),
+                          style: const TextStyle(
+                            color: Color(0xFF8F92A1),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          )),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -489,10 +765,17 @@ class _ChatsTabState extends State<_ChatsTab> {
                       if (isMe)
                         const Padding(
                           padding: EdgeInsets.only(right: 4),
-                          child: Icon(Icons.done_all, size: 16, color: Color(0xFF2196F3)),
+                          child: Icon(Icons.done_all,
+                              size: 16, color: Color(0xFF5B4DFF)),
                         ),
                       Expanded(
-                        child: Text(lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF8F92A1), fontSize: 14)),
+                        child: Text(last,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF8F92A1),
+                              fontSize: 14,
+                            )),
                       ),
                     ],
                   ),
@@ -505,89 +788,19 @@ class _ChatsTabState extends State<_ChatsTab> {
     );
   }
 
-  Widget _avatar(UserModel user, double radius) {
-    final hasImage = user.photoUrl != null && user.photoUrl!.isNotEmpty &&
-        (user.photoUrl!.startsWith('data:image') || user.photoUrl!.startsWith('http'));
-    return Stack(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: hasImage ? null : const LinearGradient(colors: [Color(0xFF2196F3), Color(0xFF1976D2)]),
-            boxShadow: [BoxShadow(color: const Color(0xFF2196F3).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
-          ),
-          child: CircleAvatar(
-            radius: radius,
-            backgroundColor: Colors.white,
-            child: ClipOval(
-              child: hasImage
-                  ? _buildAvatarImage(user.photoUrl!, radius * 2)
-                  : Container(
-                      width: radius * 2, height: radius * 2,
-                      color: const Color(0xFF2196F3).withOpacity(0.15),
-                      child: Center(
-                        child: Text(
-                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                          style: TextStyle(color: const Color(0xFF2196F3), fontWeight: FontWeight.bold, fontSize: radius * 0.7),
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-        ),
-        if (user.isOnline)
-          Positioned(
-            bottom: 2, right: 2,
-            child: Container(
-              width: radius * 0.5, height: radius * 0.5,
-              decoration: BoxDecoration(
-                color: const Color(0xFF00C853),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2.5),
-                boxShadow: [BoxShadow(color: const Color(0xFF00C853).withOpacity(0.6), blurRadius: 8)],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildAvatarImage(String url, double size) {
-    if (url.startsWith('data:image')) {
-      return Image.memory(_decodeBase64(url), width: size, height: size, fit: BoxFit.cover);
-    }
-    return CachedNetworkImage(
-      imageUrl: url, width: size, height: size, fit: BoxFit.cover,
-      placeholder: (c, u) => Container(color: const Color(0xFF2196F3).withOpacity(0.1)),
-      errorWidget: (c, u, e) => Container(color: const Color(0xFF2196F3).withOpacity(0.1), child: const Icon(Icons.person, color: Color(0xFF2196F3))),
-    );
-  }
-
-  Widget _buildNetworkImage(String url) {
-    if (url.startsWith('data:image')) {
-      return Image.memory(_decodeBase64(url), fit: BoxFit.cover);
-    }
-    return CachedNetworkImage(
-      imageUrl: url, fit: BoxFit.cover,
-      placeholder: (c, u) => const Icon(Icons.group, color: Colors.white, size: 28),
-      errorWidget: (c, u, e) => const Icon(Icons.group, color: Colors.white, size: 28),
-    );
-  }
-
-  Uint8List _decodeBase64(String dataUrl) => base64Decode(dataUrl.split(',').last);
-
-  String _formatTime(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return '';
+  String _fmtTime(String? ts) {
+    if (ts == null || ts.isEmpty) return '';
     try {
-      final dt = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(dt);
+      final d = DateTime.parse(ts);
+      final diff = DateTime.now().difference(d);
       if (diff.inDays > 0) return '${diff.inDays}d';
       if (diff.inHours > 0) return '${diff.inHours}h';
       if (diff.inMinutes > 0) return '${diff.inMinutes}m';
       return 'now';
-    } catch (_) { return ''; }
+    } catch (_) {
+      return '';
+    }
   }
+
+  Uint8List _b64(String d) => base64Decode(d.split(',').last);
 }
-
-
