@@ -7,9 +7,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/auth_screen.dart';
 import 'services/chat_service.dart';
 import 'screens/chat_list_screen.dart';
+import 'screens/call_screen.dart';
+import 'services/call_service.dart';
+import 'models/user_model.dart';
 import 'services/chat_service.dart';
 import 'theme.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
@@ -98,6 +102,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Chatly',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
@@ -158,10 +163,41 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
           );
         }
         if (snapshot.hasData && snapshot.data != null) {
+          _startIncomingCallListener();
           return const ChatListScreen();
         }
         return const AuthScreen();
       },
     );
+  }
+
+  void _startIncomingCallListener() {
+    final callService = CallService();
+    callService.listenIncomingCalls().listen((doc) async {
+      if (!doc.exists) return;
+      final data = doc.data() as Map<String, dynamic>;
+      final callId = data['callId'] as String;
+      final callerId = data['callerId'] as String;
+      final callType = data['callType'] as String;
+
+      final chatService = ChatService();
+      final caller = await chatService.getUserById(callerId);
+
+      if (caller != null && navigatorKey.currentState != null) {
+        // Show incoming call screen
+        navigatorKey.currentState!.push(
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              callId: callId,
+              otherUserId: callerId,
+              otherUserName: caller.name,
+              otherUserPhoto: caller.photoUrl,
+              callType: callType,
+              isCaller: false,
+            ),
+          ),
+        );
+      }
+    });
   }
 }

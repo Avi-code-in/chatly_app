@@ -22,6 +22,8 @@ import '../widgets/voice_recorder_bar.dart';
 import '../widgets/full_screen_image.dart';
 import '../widgets/video_player_widget.dart';
 import 'group_info_screen.dart';
+import 'call_screen.dart';
+import '../services/call_service.dart';
 import 'schedule_message_screen.dart';
 import 'pin_setup_screen.dart';
 import 'pin_unlock_screen.dart';
@@ -788,8 +790,14 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       actions: [
         if (!isGroupChat) ...[
-          IconButton(icon: const Icon(Icons.videocam, color: Colors.white), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.call, color: Colors.white), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.videocam, color: Colors.white),
+            onPressed: () => _startCall('video'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.call, color: Colors.white),
+            onPressed: () => _startCall('audio'),
+          ),
         ],
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert, color: Colors.white),
