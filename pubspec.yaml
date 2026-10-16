@@ -41,6 +41,8 @@ dependencies:
   gal: ^2.3.3
   http: ^1.6.0
   cached_network_image: ^3.4.1
+  metered_realtime: ^0.2.0
+  flutter_webrtc: ^1.6.2+hotfix.4
 
 dev_dependencies:
   flutter_test:
