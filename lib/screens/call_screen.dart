@@ -110,7 +110,7 @@ class _CallScreenState extends State<CallScreen>
 
   // ============ CALLER ============
   Future<void> _startAsCaller() async {
-    _pc = await _callService.createPeerConnection(widget.callId);
+    _pc = await _callService.createCallPeer(widget.callId);
 
     for (var track in _localStream!.getTracks()) {
       await _pc!.addTrack(track, _localStream!);
@@ -147,7 +147,7 @@ class _CallScreenState extends State<CallScreen>
 
   // ============ RECEIVER ============
   Future<void> _startAsReceiver() async {
-    _pc = await _callService.createPeerConnection(widget.callId);
+    _pc = await _callService.createCallPeer(widget.callId);
 
     for (var track in _localStream!.getTracks()) {
       await _pc!.addTrack(track, _localStream!);

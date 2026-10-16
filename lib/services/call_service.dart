@@ -178,7 +178,7 @@ class CallService {
   }
 
   // ==================== WEBRTC ====================
-  Future<RTCPeerConnection> createPeerConnection(String callId) async {
+  Future<RTCPeerConnection> createCallPeer(String callId) async {
     final Map<String, dynamic> config = {
       'iceServers': [
         {
