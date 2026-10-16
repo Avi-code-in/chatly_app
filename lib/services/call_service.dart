@@ -11,10 +11,8 @@ class CallService {
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
-  // 🔴 RENDER BACKEND URL
   static const String _backendUrl = 'https://chatly-call-backend.onrender.com';
 
-  // STUN servers (free)
   final Map<String, dynamic> _iceConfig = {
     'iceServers': [
       {
@@ -23,22 +21,23 @@ class CallService {
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
           'stun:stun3.l.google.com:19302',
+          'stun:stun4.l.google.com:19302',
         ],
       },
     ],
     'sdpSemantics': 'unified-plan',
+    'iceCandidatePoolSize': 10,
   };
 
   // ==================== START CALL ====================
   Future<String> startCall(String receiverId, String callType) async {
-    final callId = _firestore.collection('calls').doc().id;
+    final callId = '${currentUserId}_${DateTime.now().millisecondsSinceEpoch}';
 
     final callerDoc =
         await _firestore.collection('users').doc(currentUserId).get();
     final callerName = callerDoc.data()?['name'] ?? 'Someone';
     final callerPhoto = callerDoc.data()?['photoUrl'];
 
-    // Save call document
     await _firestore.collection('calls').doc(callId).set({
       'callId': callId,
       'callerId': currentUserId,
@@ -47,14 +46,15 @@ class CallService {
       'receiverId': receiverId,
       'callType': callType,
       'status': 'ringing',
-      'createdAt': DateTime.now().toIso8601String(),
+      'createdAt': FieldValue.serverTimestamp(),
       'offer': null,
       'answer': null,
       'callerCandidates': [],
       'receiverCandidates': [],
+      'callerConnected': false,
+      'receiverConnected': false,
     });
 
-    // Set caller in-call status
     await _firestore
         .collection('users')
         .doc(currentUserId)
@@ -63,10 +63,9 @@ class CallService {
         .set({
       'inCall': true,
       'callId': callId,
-      'startedAt': DateTime.now().toIso8601String(),
+      'startedAt': FieldValue.serverTimestamp(),
     });
 
-    // Add to receiver's incoming_calls
     await _firestore
         .collection('users')
         .doc(receiverId)
@@ -78,16 +77,14 @@ class CallService {
       'callerName': callerName,
       'callerPhoto': callerPhoto,
       'callType': callType,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // Send FCM via backend (works even if receiver app is killed)
     _sendBackendCall(receiverId, callId, callType, callerName);
 
     return callId;
   }
 
-  // ==================== BACKEND FCM CALL ====================
   Future<void> _sendBackendCall(
     String receiverId,
     String callId,
@@ -108,26 +105,33 @@ class CallService {
             }),
           )
           .timeout(const Duration(seconds: 15));
-      print('✅ Backend call: ${response.statusCode} ${response.body}');
+      print('✅ Backend: ${response.statusCode}');
     } catch (e) {
-      print('❌ Backend call failed: $e');
+      print('❌ Backend error: $e');
     }
   }
 
-  // ==================== ACCEPT / REJECT / END ====================
+  // ==================== ACCEPT ====================
   Future<void> acceptCall(String callId) async {
     await _firestore.collection('calls').doc(callId).update({
       'status': 'accepted',
-      'acceptedAt': DateTime.now().toIso8601String(),
+      'acceptedAt': FieldValue.serverTimestamp(),
     });
-  }
 
-  Future<void> rejectCall(String callId) async {
+    // Mark receiver in-call
+    await _firestore
+        .collection('users')
+        .doc(currentUserId)
+        .collection('call_status')
+        .doc('current')
+        .set({
+      'inCall': true,
+      'callId': callId,
+      'startedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Delete incoming_call notification
     try {
-      await _firestore.collection('calls').doc(callId).update({
-        'status': 'rejected',
-        'endedAt': DateTime.now().toIso8601String(),
-      });
       await _firestore
           .collection('users')
           .doc(currentUserId)
@@ -137,13 +141,28 @@ class CallService {
     } catch (_) {}
   }
 
+  // ==================== REJECT / END ====================
+  Future<void> rejectCall(String callId) async {
+    try {
+      await _firestore.collection('calls').doc(callId).update({
+        'status': 'rejected',
+        'endedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+    await _cleanup(callId);
+  }
+
   Future<void> endCall(String callId) async {
     try {
       await _firestore.collection('calls').doc(callId).update({
         'status': 'ended',
-        'endedAt': DateTime.now().toIso8601String(),
+        'endedAt': FieldValue.serverTimestamp(),
       });
     } catch (_) {}
+    await _cleanup(callId);
+  }
+
+  Future<void> _cleanup(String callId) async {
     try {
       await _firestore
           .collection('users')
@@ -177,24 +196,19 @@ class CallService {
     return _firestore.collection('calls').doc(callId).snapshots();
   }
 
-  // ==================== WEBRTC ====================
-  Future<RTCPeerConnection> createCallPeer(String callId) async {
-    final Map<String, dynamic> config = {
-      'iceServers': [
-        {
-          'urls': [
-            'stun:stun.l.google.com:19302',
-            'stun:stun1.l.google.com:19302',
-            'stun:stun2.l.google.com:19302',
-          ],
-        },
-      ],
-    };
-    final pc = await createPeerConnection(config);
+  // ==================== WEBRTC PEER ====================
+  Future<RTCPeerConnection> createPeerConnection(String callId) async {
+    final pc = await createPeerConnection(_iceConfig);
 
     pc.onIceCandidate = (candidate) {
       if (candidate.candidate != null) {
-        _firestore.collection('calls').doc(callId).update({
+        final field = currentUserId.toString().contains('_caller_')
+            ? 'callerCandidates'
+            : 'callerCandidates';
+        _firestore
+            .collection('calls')
+            .doc(callId)
+            .update({
           'callerCandidates': FieldValue.arrayUnion([
             {
               'candidate': candidate.candidate,
@@ -202,15 +216,39 @@ class CallService {
               'sdpMid': candidate.sdpMid,
             }
           ]),
-        });
+        }).catchError((_) {});
       }
     };
 
-    pc.onConnectionState = (state) {
-      print('Connection: $state');
-    };
-
     return pc;
+  }
+
+  // Caller's ICE
+  Future<void> sendCallerCandidate(
+      String callId, RTCIceCandidate candidate) async {
+    await _firestore.collection('calls').doc(callId).update({
+      'callerCandidates': FieldValue.arrayUnion([
+        {
+          'candidate': candidate.candidate,
+          'sdpMLineIndex': candidate.sdpMLineIndex,
+          'sdpMid': candidate.sdpMid,
+        }
+      ]),
+    });
+  }
+
+  // Receiver's ICE
+  Future<void> sendReceiverCandidate(
+      String callId, RTCIceCandidate candidate) async {
+    await _firestore.collection('calls').doc(callId).update({
+      'receiverCandidates': FieldValue.arrayUnion([
+        {
+          'candidate': candidate.candidate,
+          'sdpMLineIndex': candidate.sdpMLineIndex,
+          'sdpMid': candidate.sdpMid,
+        }
+      ]),
+    });
   }
 
   Future<void> sendOffer(String callId, RTCSessionDescription offer) async {
@@ -223,25 +261,6 @@ class CallService {
     await _firestore.collection('calls').doc(callId).update({
       'answer': {'type': answer.type, 'sdp': answer.sdp},
     });
-  }
-
-  Future<void> addIceCandidate(
-    String callId,
-    RTCIceCandidate candidate,
-    bool isCaller,
-  ) async {
-    final field = isCaller ? 'callerCandidates' : 'receiverCandidates';
-    try {
-      await _firestore.collection('calls').doc(callId).update({
-        field: FieldValue.arrayUnion([
-          {
-            'candidate': candidate.candidate,
-            'sdpMLineIndex': candidate.sdpMLineIndex,
-            'sdpMid': candidate.sdpMid,
-          }
-        ]),
-      });
-    } catch (_) {}
   }
 
   Future<bool> isUserInCall(String userId) async {

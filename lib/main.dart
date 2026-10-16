@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/chat_service.dart';
 import 'screens/chat_list_screen.dart';
+import 'screens/setup_username_screen.dart';
 import 'screens/call_screen.dart';
 import 'screens/incoming_call_screen.dart';
 import 'services/call_service.dart';
@@ -221,7 +222,24 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         }
         if (snapshot.hasData && snapshot.data != null) {
           _startIncomingCallListener();
-          return const ChatListScreen();
+          // Check if username is set
+          return FutureBuilder(
+            future: ChatService().getCurrentUser().first,
+            builder: (context, userSnap) {
+              if (userSnap.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                );
+              }
+              final user = userSnap.data;
+              if (user == null || user.username.isEmpty) {
+                return const SetupUsernameScreen();
+              }
+              return const ChatListScreen();
+            },
+          );
         }
         return const AuthScreen();
       },

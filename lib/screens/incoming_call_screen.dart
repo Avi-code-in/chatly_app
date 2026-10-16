@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:vibration/vibration.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/call_service.dart';
-import '../theme.dart';
 import 'call_screen.dart';
 
 class IncomingCallScreen extends StatefulWidget {
@@ -33,7 +33,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   final _callService = CallService();
   late AnimationController _pulse;
   bool _processing = false;
-  Timer? _vibrationTimer;
+
+  bool get isVideo => widget.callType == 'video';
 
   @override
   void initState() {
@@ -45,27 +46,38 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
     _startRingtone();
     _startVibration();
+    _autoRejectTimer();
+  }
+
+  void _autoRejectTimer() {
+    // Auto-reject after 60 seconds
+    Future.delayed(const Duration(seconds: 60), () {
+      if (mounted && !_processing) {
+        _decline();
+      }
+    });
   }
 
   Future<void> _startRingtone() async {
     try {
-      // Play system ringtone (loops automatically)
       await FlutterRingtonePlayer().playRingtone(
         looping: true,
         volume: 1.0,
-        asAlarm: false,
       );
     } catch (e) {
-      print('Ringtone error: $e');
+      try {
+        await FlutterRingtonePlayer().playAlarm(
+          looping: true,
+          volume: 1.0,
+        );
+      } catch (_) {}
     }
   }
 
   Future<void> _stopRingtone() async {
     try {
       await FlutterRingtonePlayer().stop();
-    } catch (e) {
-      print('Stop ringtone error: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _startVibration() async {
@@ -73,19 +85,20 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       if (await Vibration.hasVibrator() ?? false) {
         Vibration.vibrate(pattern: [500, 1000, 500, 1000], repeat: 0);
       }
-    } catch (e) {
-      print('Vibration error: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _stopVibration() async {
     try {
       Vibration.cancel();
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> _accept() async {
+    if (_processing) return;
     setState(() => _processing = true);
+
+    HapticFeedback.mediumImpact();
     await _stopRingtone();
     await _stopVibration();
 
@@ -109,10 +122,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   }
 
   Future<void> _decline() async {
+    if (_processing) return;
     setState(() => _processing = true);
+
+    HapticFeedback.mediumImpact();
     await _stopRingtone();
     await _stopVibration();
     await _callService.rejectCall(widget.callId);
+
     if (mounted) Navigator.pop(context);
   }
 
@@ -121,41 +138,45 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     _stopRingtone();
     _stopVibration();
     _pulse.dispose();
-    _vibrationTimer?.cancel();
     super.dispose();
+  }
+
+  bool _hasImage(String? url) {
+    if (url == null || url.isEmpty) return false;
+    return url.startsWith('data:image') || url.startsWith('http');
   }
 
   @override
   Widget build(BuildContext context) {
-    final isVideo = widget.callType == 'video';
-    final hasImage = _hasImage(widget.callerPhoto);
+    final hasImg = _hasImage(widget.callerPhoto);
 
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: const Color(0xFF0B1220),
         body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(0, -0.3),
+              radius: 1.5,
               colors: [
-                const Color(0xFF1A2340),
-                const Color(0xFF0A0E1A),
-                const Color(0xFF151B2E),
+                Color(0xFF1A2E4A),
+                Color(0xFF0B1220),
+                Color(0xFF050810),
               ],
             ),
           ),
           child: SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
 
+                // Call type badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: Colors.white.withOpacity(0.15),
@@ -171,103 +192,111 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        isVideo ? 'Incoming Video Call' : 'Incoming Call',
+                        isVideo
+                            ? 'Incoming Video Call'
+                            : 'Incoming Voice Call',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                const Spacer(),
+                const Spacer(flex: 1),
 
+                // Pulsing avatar
                 AnimatedBuilder(
                   animation: _pulse,
                   builder: (context, child) {
-                    return Container(
-                      width: 200 + (_pulse.value * 50),
-                      height: 200 + (_pulse.value * 50),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF2196F3).withOpacity(
-                            0.6 - (_pulse.value * 0.5),
+                    final scale = 1 + (_pulse.value * 0.15);
+                    final opacity = 0.4 + (_pulse.value * 0.3);
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 220,
+                          height: 220,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF3B82F6)
+                                  .withOpacity(opacity * 0.5),
+                              width: 2,
+                            ),
                           ),
-                          width: 3,
                         ),
-                      ),
-                      child: Center(child: child),
+                        Container(
+                          width: 180,
+                          height: 180,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF3B82F6)
+                                    .withOpacity(opacity * 0.6),
+                                blurRadius: 50,
+                                spreadRadius: 10,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Transform.scale(
+                          scale: scale,
+                          child: _buildAvatar(hasImg, 75),
+                        ),
+                      ],
                     );
                   },
-                  child: _buildAvatar(hasImage, 75),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 40),
 
+                // Caller name
                 Text(
                   widget.callerName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 0.5,
                   ),
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
                 Text(
-                  'is calling you...',
+                  isVideo ? 'Video call from...' : 'Calling you...',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
-                    fontSize: 15,
+                    fontSize: 16,
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const Spacer(flex: 2),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(3, (i) {
-                    return AnimatedBuilder(
-                      animation: _pulse,
-                      builder: (context, _) {
-                        final opacity = ((_pulse.value + i * 0.3) % 1.0);
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2196F3)
-                                .withOpacity(0.3 + (opacity * 0.7)),
-                            shape: BoxShape.circle,
-                          ),
-                        );
-                      },
-                    );
-                  }),
-                ),
-
-                const Spacer(),
-
+                // ==================== BUTTONS ====================
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      // DECLINE
                       _actionButton(
                         icon: Icons.call_end,
                         label: 'Decline',
                         gradient: const LinearGradient(
-                          colors: [Color(0xFFFF4D4D), Color(0xFFE53935)],
+                          colors: [Color(0xFFFF3B30), Color(0xFFD32F2F)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         onTap: _processing ? null : _decline,
                       ),
+
+                      // ACCEPT
                       _actionButton(
                         icon: isVideo ? Icons.videocam : Icons.call,
                         label: 'Accept',
@@ -283,9 +312,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                 ),
 
                 const SizedBox(height: 60),
-
-                if (_processing)
-                  const CircularProgressIndicator(color: Colors.white),
               ],
             ),
           ),
@@ -294,52 +320,46 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     );
   }
 
-  bool _hasImage(String? url) {
-    if (url == null || url.isEmpty) return false;
-    return url.startsWith('data:image') || url.startsWith('http');
-  }
-
-  Widget _buildAvatar(bool hasImage, double radius) {
+  Widget _buildAvatar(bool hasImg, double radius) {
     return Container(
       width: radius * 2,
       height: radius * 2,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: hasImage
+        gradient: hasImg
             ? null
             : const LinearGradient(
-                colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                colors: [Color(0xFF3B82F6), Color(0xFF1E40AF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2196F3).withOpacity(0.6),
-            blurRadius: 50,
-            spreadRadius: 8,
-          ),
-        ],
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 3,
+        ),
       ),
       child: ClipOval(
-        child: hasImage
+        child: hasImg
             ? (widget.callerPhoto!.startsWith('data:image')
                 ? Image.memory(
                     base64Decode(widget.callerPhoto!.split(',').last),
                     fit: BoxFit.cover,
                   )
-                : Image.network(
-                    widget.callerPhoto!,
+                : CachedNetworkImage(
+                    imageUrl: widget.callerPhoto!,
                     fit: BoxFit.cover,
-                    errorBuilder: (c, u, e) => _fallbackAvatar(radius),
+                    errorWidget: (c, u, e) => _fallback(radius),
                   ))
-            : _fallbackAvatar(radius),
+            : _fallback(radius),
       ),
     );
   }
 
-  Widget _fallbackAvatar(double radius) {
+  Widget _fallback(double radius) {
     return Container(
       width: radius * 2,
       height: radius * 2,
-      color: const Color(0xFF2196F3),
+      color: const Color(0xFF3B82F6),
       child: Center(
         child: Text(
           widget.callerName.isNotEmpty
@@ -347,8 +367,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
               : '?',
           style: TextStyle(
             color: Colors.white,
-            fontSize: radius * 0.8,
-            fontWeight: FontWeight.w700,
+            fontSize: radius * 0.9,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -367,27 +387,27 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 72,
-            height: 72,
+            width: 76,
+            height: 76,
             decoration: BoxDecoration(
               gradient: gradient,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: gradient.colors.first.withOpacity(0.4),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
+                  color: gradient.colors.first.withOpacity(0.5),
+                  blurRadius: 25,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
-            child: Icon(icon, color: Colors.white, size: 32),
+            child: Icon(icon, color: Colors.white, size: 34),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Text(
             label,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
