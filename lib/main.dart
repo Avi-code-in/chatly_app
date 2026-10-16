@@ -13,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/chat_service.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/call_screen.dart';
+import 'screens/incoming_call_screen.dart';
 import 'services/call_service.dart';
 import 'models/user_model.dart';
 import 'services/chat_service.dart';
@@ -236,6 +237,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         final params = event.callKitParams;
         final extra = params.extra;
         if (extra != null && navigatorKey.currentState != null) {
+          // Accept the call in Firestore
+          final callService = CallService();
+          await callService.acceptCall(extra['callId'] ?? '');
+          
           navigatorKey.currentState!.push(
             MaterialPageRoute(
               builder: (_) => CallScreen(

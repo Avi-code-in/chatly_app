@@ -528,70 +528,93 @@ class _CallScreenState extends State<CallScreen>
                       ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _ctrlBtn(
-                        icon: _speakerOn
-                            ? Icons.volume_up
-                            : Icons.volume_off,
-                        label: 'Speaker',
-                        onTap: () =>
-                            setState(() => _speakerOn = !_speakerOn),
+                      // Row 1: Small control buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _ctrlBtn(
+                            icon: _speakerOn
+                                ? Icons.volume_up
+                                : Icons.volume_off,
+                            label: 'Speaker',
+                            onTap: () =>
+                                setState(() => _speakerOn = !_speakerOn),
+                          ),
+                          const SizedBox(width: 16),
+                          _ctrlBtn(
+                            icon: _muted ? Icons.mic_off : Icons.mic,
+                            label: 'Mute',
+                            active: _muted,
+                            onTap: _toggleMute,
+                          ),
+                          const SizedBox(width: 16),
+                          if (isVideo) ...[
+                            _ctrlBtn(
+                              icon: _videoOn
+                                  ? Icons.videocam
+                                  : Icons.videocam_off,
+                              label: 'Video',
+                              active: !_videoOn,
+                              onTap: _toggleVideo,
+                            ),
+                            const SizedBox(width: 16),
+                            _ctrlBtn(
+                              icon: Icons.flip_camera_ios,
+                              label: 'Flip',
+                              onTap: _switchCamera,
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(width: 18),
-                      _ctrlBtn(
-                        icon: _muted ? Icons.mic_off : Icons.mic,
-                        label: 'Mute',
-                        active: _muted,
-                        onTap: _toggleMute,
-                      ),
-                      const SizedBox(width: 18),
-                      if (isVideo) ...[
-                        _ctrlBtn(
-                          icon: _videoOn
-                              ? Icons.videocam
-                              : Icons.videocam_off,
-                          label: 'Video',
-                          active: !_videoOn,
-                          onTap: _toggleVideo,
-                        ),
-                        const SizedBox(width: 18),
-                        _ctrlBtn(
-                          icon: Icons.flip_camera_ios,
-                          label: 'Flip',
-                          onTap: _switchCamera,
-                        ),
-                        const SizedBox(width: 18),
-                      ],
+
+                      const SizedBox(height: 28),
+
+                      // Row 2: Big End Call button
                       GestureDetector(
                         onTap: _endCall,
-                        child: Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFFFF4D4D),
-                                Color(0xFFE53935),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.red.withOpacity(0.4),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFF4D4D),
+                                    Color(0xFFE53935),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withOpacity(0.5),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.call_end,
-                            color: Colors.white,
-                            size: 30,
-                          ),
+                              child: const Icon(
+                                Icons.call_end,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'End Call',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
