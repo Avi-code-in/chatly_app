@@ -263,7 +263,7 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
                     backgroundImage: hasPhoto
                         ? (u['photoUrl'].toString().startsWith('data:image')
                             ? MemoryImage(_b64(u['photoUrl']))
-                            : CachedNetworkImageProvider(u['photoUrl']))
+                            : CachedNetworkImageProvider(u['photoUrl'].toString()) as ImageProvider)
                         : null,
                     child: !hasPhoto
                         ? Text(

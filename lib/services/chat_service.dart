@@ -1358,7 +1358,7 @@ class ChatService {
           final email = e.address.trim().toLowerCase();
           if (email.isNotEmpty && email.contains('@')) {
             list.add({
-              'name': c.displayName.isEmpty ? 'Unknown' : c.displayName,
+              'name': (c.displayName ?? '').isEmpty ? 'Unknown' : (c.displayName ?? 'Unknown'),
               'email': email,
             });
           }
@@ -1544,12 +1544,5 @@ class ChatService {
     return restored;
   }
 
-  Stream<Map<String, dynamic>?> getBackupInfo() {
-    final uid = currentUserId;
-    return _firestore
-        .collection('users')
-        .doc(uid)
-        .snapshots()
-        .map((d) => d.data()?['backup'] as Map<String, dynamic>?);
-  }
+  
 }

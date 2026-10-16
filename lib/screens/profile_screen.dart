@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -21,6 +22,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _service = ChatService();
   final _cloudinary = CloudinaryService();
   bool _uploading = false;
+
+  
+  void _showLiveTypingDialog() {
+    final service = ChatService();
+    showDialog(
+      context: context,
+      builder: (ctx) => StreamBuilder<bool>(
+        stream: service.getLiveTypingSetting(),
+        builder: (ctx, snap) {
+          final enabled = snap.data ?? true;
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.visibility_outlined, color: Color(0xFF5B4DFF)),
+                SizedBox(width: 10),
+                Text('Live Typing Preview'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'When ON, others can see what you\'re typing in real-time.',
+                  style: TextStyle(fontSize: 13.5, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable for everyone',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  value: enabled,
+                  activeColor: const Color(0xFF5B4DFF),
+                  onChanged: (v) async {
+                    await service.updateLiveTypingSetting(v);
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> _pickProfilePhoto() async {
     final picked = await ImagePicker().pickImage(

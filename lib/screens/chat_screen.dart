@@ -672,7 +672,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8EEFF),
-      appBar: _selectionMode ? _selAppBar() : _normalAppBar(),
+      appBar: _selectionMode ? _selAppBar() : _buildNormalAppBar(false),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -2127,6 +2127,60 @@ class _SwipeReplyState extends State<_SwipeReply> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDisappearingOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StreamBuilder<int?>(
+        stream: _chatService.getDisappearingHours(widget.chatId),
+        builder: (ctx, snap) {
+          final cur = snap.data;
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 16),
+                const Text('Disappearing messages',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                _dOpt('Off', null, cur),
+                _dOpt('24 hours', 24, cur),
+                _dOpt('7 days', 168, cur),
+                _dOpt('90 days', 2160, cur),
+                const SizedBox(height: 16),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _dOpt(String label, int? hours, int? cur) {
+    final sel = hours == cur;
+    return ListTile(
+      leading: Icon(
+        sel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        color: sel ? const Color(0xFF5B4DFF) : const Color(0xFF8F92A1),
+      ),
+      title: Text(label),
+      onTap: () async {
+        await _chatService.setDisappearingMessages(widget.chatId, hours);
+        if (mounted) Navigator.pop(context);
+      },
+    );
+  }
+
+  void _snackCall(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(m), duration: const Duration(seconds: 2)),
     );
   }
 }

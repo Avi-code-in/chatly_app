@@ -693,7 +693,7 @@ class _ChatsTabState extends State<_ChatsTab> {
                     backgroundImage: hasImg
                         ? (u.photoUrl!.startsWith('data:image')
                             ? MemoryImage(_b64(u.photoUrl!))
-                            : CachedNetworkImageProvider(u.photoUrl!))
+                            : CachedNetworkImageProvider(u.photoUrl!) as ImageProvider)
                         : null,
                     child: !hasImg
                         ? Text(

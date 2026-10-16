@@ -374,18 +374,16 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   // ==================== BACKGROUND ====================
-  Widget _bg() => Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.6),
-            radius: 1.4,
-            colors: [
-              Color(0xFF1E4976),
-              Color(0xFF0A1A2E),
-              Color(0xFF050B14),
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
+  BoxDecoration get _bgDeco => const BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0, -0.6),
+          radius: 1.4,
+          colors: [
+            Color(0xFF1E4976),
+            Color(0xFF0A1A2E),
+            Color(0xFF050B14),
+          ],
+          stops: [0.0, 0.5, 1.0],
         ),
       );
 
@@ -571,7 +569,7 @@ class _CallScreenState extends State<CallScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF06101E),
       body: Container(
-        decoration: _bg().decoration,
+        decoration: _bgDeco,
         child: SafeArea(
           child: Column(
             children: [
@@ -736,7 +734,7 @@ class _CallScreenState extends State<CallScreen> {
       backgroundColor: const Color(0xFF06101E),
       body: Stack(
         children: [
-          Positioned.fill(child: Container(decoration: _bg().decoration)),
+          Positioned.fill(child: Container(decoration: _bgDeco)),
           Positioned.fill(
             child: Center(
               child: Column(
@@ -973,7 +971,7 @@ class _CallScreenState extends State<CallScreen> {
   Widget _endedScreen() => Scaffold(
         backgroundColor: const Color(0xFF06101E),
         body: Container(
-          decoration: _bg().decoration,
+          decoration: _bgDeco,
           child: SafeArea(
             child: Column(
               children: [

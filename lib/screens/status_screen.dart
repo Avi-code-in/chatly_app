@@ -566,7 +566,7 @@ class _StatusScreenState extends State<StatusScreen> {
         backgroundImage: has
             ? (photo.startsWith('data:image')
                 ? MemoryImage(_b64(photo))
-                : CachedNetworkImageProvider(photo))
+                : CachedNetworkImageProvider(photo) as ImageProvider)
             : null,
         child: !has
             ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
