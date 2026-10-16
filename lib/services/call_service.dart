@@ -179,7 +179,18 @@ class CallService {
 
   // ==================== WEBRTC ====================
   Future<RTCPeerConnection> createPeerConnection(String callId) async {
-    final pc = await createPeerConnection(_iceConfig);
+    final Map<String, dynamic> config = {
+      'iceServers': [
+        {
+          'urls': [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302',
+          ],
+        },
+      ],
+    };
+    final pc = await createPeerConnection(config);
 
     pc.onIceCandidate = (candidate) {
       if (candidate.candidate != null) {

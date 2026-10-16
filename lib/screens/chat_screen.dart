@@ -142,6 +142,52 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _startCall(String type) async {
+    if (isGroupChat) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Group calls coming soon')),
+      );
+      return;
+    }
+
+    try {
+      final callService = CallService();
+      final otherUser = await _chatService.getOtherUser(widget.chatId);
+      if (otherUser == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User not found')),
+          );
+        }
+        return;
+      }
+
+      final callId = await callService.startCall(otherUser.uid, type);
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              callId: callId,
+              otherUserId: otherUser.uid,
+              otherUserName: otherUser.name,
+              otherUserPhoto: otherUser.photoUrl,
+              callType: type,
+              isCaller: true,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Call failed: \$e')),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _messageController.dispose();
