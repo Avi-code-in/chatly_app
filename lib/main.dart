@@ -25,10 +25,41 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  await _requestAllPermissions();
-  
-  // Start global workers
-  _startGlobalWorkers();
+
+  final data = message.data;
+  if (data['type'] == 'incoming_call') {
+    final params = CallKitParams(
+      id: data['callId'] ?? const Uuid().v4(),
+      nameCaller: data['callerName'] ?? 'Unknown',
+      appName: 'Chatly',
+      type: data['callType'] == 'video' ? 1 : 0,
+      duration: 30000,
+      extra: {
+        'callId': data['callId'],
+        'callerId': data['callerId'],
+        'callType': data['callType'],
+      },
+      android: const AndroidParams(
+        isCustomNotification: true,
+        isShowLogo: false,
+        ringtonePath: 'system_ringtone_default',
+        backgroundColor: '#0955fa',
+        actionColor: '#4CAF50',
+        textColor: '#ffffff',
+        textAccept: 'Accept',
+        textDecline: 'Decline',
+        isFullScreen: true,
+      ),
+      ios: const IOSParams(
+        iconName: 'CallKitLogo',
+        handleType: 'generic',
+        supportsVideo: true,
+        maximumCallGroups: 2,
+        maximumCallsPerCallGroup: 1,
+      ),
+    );
+    await FlutterCallkitIncoming.showCallkitIncoming(params);
+  }
 }
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
@@ -201,7 +232,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     FlutterCallkitIncoming.onEvent.listen((CallEvent? event) {
       if (event == null) return;
 
-      // Accept action
       if (event is CallEventActionCallAccept) {
         final params = event.callKitParams;
         final extra = params.extra;
@@ -218,21 +248,11 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
             ),
           );
         }
-      }
-      // Decline action
-      else if (event is CallEventActionCallDecline) {
+      } else if (event is CallEventActionCallDecline) {
         final params = event.callKitParams;
         final extra = params.extra;
         if (extra != null) {
           CallService().rejectCall(extra['callId']);
-        }
-      }
-      // Ended action
-      else if (event is CallEventActionCallEnded) {
-        final params = event.callKitParams;
-        final extra = params.extra;
-        if (extra != null) {
-          CallService().endCall(extra['callId']);
         }
       }
     });
