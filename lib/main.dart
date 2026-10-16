@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/auth_screen.dart';
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'package:flutter_callkit_incoming/entities/entities.dart';
+import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/chat_service.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/call_screen.dart';
@@ -20,6 +25,7 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  await _requestAllPermissions();
   
   // Start global workers
   _startGlobalWorkers();
@@ -70,9 +76,28 @@ Future<void> _setupFcm() async {
   });
 }
 
+Future<void> _requestAllPermissions() async {
+  try {
+    await [
+      Permission.camera,
+      Permission.microphone,
+      Permission.notification,
+      Permission.storage,
+      Permission.photos,
+      Permission.videos,
+      Permission.audio,
+      Permission.location,
+      Permission.contacts,
+    ].request();
+  } catch (e) {
+    print('Permission error: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  await _requestAllPermissions();
   
   // Start global workers
   _startGlobalWorkers();
@@ -172,6 +197,36 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   void _startIncomingCallListener() {
+    // CallKit event listener
+    FlutterCallkitIncoming.onEvent.listen((CallEvent? event) {
+      switch (event!.event) {
+        case Event.actionCallAccept:
+          final extra = event.body['extra'] as Map<String, dynamic>?;
+          if (extra != null && navigatorKey.currentState != null) {
+            navigatorKey.currentState!.push(
+              MaterialPageRoute(
+                builder: (_) => CallScreen(
+                  callId: extra['callId'],
+                  otherUserId: extra['callerId'],
+                  otherUserName: event.body['nameCaller'] ?? 'Unknown',
+                  callType: extra['callType'] ?? 'audio',
+                  isCaller: false,
+                ),
+              ),
+            );
+          }
+          break;
+        case Event.actionCallDecline:
+          final extra = event.body['extra'] as Map<String, dynamic>?;
+          if (extra != null) {
+            CallService().rejectCall(extra['callId']);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
     final callService = CallService();
     callService.listenIncomingCalls().listen((doc) async {
       if (!doc.exists) return;

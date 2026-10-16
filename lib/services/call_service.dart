@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:firebase_cloud_messaging_dart/firebase_cloud_messaging_dart.dart';
+import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
 
 class CallService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -53,7 +56,49 @@ class CallService {
       'startedAt': DateTime.now().toIso8601String(),
     });
 
+    // Send FCM notification to receiver
+    await _sendCallNotification(receiverId, callId, callType, callerName);
+
     return callId;
+  }
+
+  Future<void> _sendCallNotification(
+    String receiverId,
+    String callId,
+    String callType,
+    String callerName,
+  ) async {
+    try {
+      // Get receiver's FCM token
+      final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
+      final token = receiverDoc.data()?['fcmToken'] as String?;
+      if (token == null || token.isEmpty) return;
+
+      // Load service account
+      final jsonString = await rootBundle.loadString('assets/serviceAccountKey.json');
+      final server = FirebaseCloudMessagingServer.fromServiceAccountJson(jsonString);
+
+      // Send high priority notification
+      await server.send(
+        FcmMessage(
+          token: token,
+          android: const FcmAndroidConfig(
+            priority: 'high',
+            ttl: '30s',
+          ),
+          data: {
+            'type': 'incoming_call',
+            'callId': callId,
+            'callerId': currentUserId,
+            'callerName': callerName,
+            'callType': callType,
+          },
+        ),
+      );
+      print('✅ Call notification sent');
+    } catch (e) {
+      print('❌ FCM send error: $e');
+    }
   }
 
   // ============ ACCEPT CALL ============
