@@ -439,6 +439,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+
+  void _showLanguageDialog(BuildContext context) {
+    final chatService = ChatService();
+    showDialog(
+      context: context,
+      builder: (context) => StreamBuilder<UserModel?>(
+        stream: chatService.getCurrentUser(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || snapshot.data == null) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2196F3)),
+            );
+          }
+          final user = snapshot.data!;
+          String selected = user.preferredLanguage;
+
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+                title: const Row(
+                  children: [
+                    Icon(Icons.language, color: Color(0xFF2196F3)),
+                    SizedBox(width: 10),
+                    Text('Your Language'),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  height: 400,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: TranslationService.languages.length,
+                    itemBuilder: (context, i) {
+                      final entry =
+                          TranslationService.languages.entries.elementAt(i);
+                      return RadioListTile<String>(
+                        value: entry.key,
+                        groupValue: selected,
+                        activeColor: const Color(0xFF2196F3),
+                        title: Text(entry.value),
+                        onChanged: (v) async {
+                          if (v != null) {
+                            setDialogState(() => selected = v);
+                            await chatService.updatePreferredLanguage(v);
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,

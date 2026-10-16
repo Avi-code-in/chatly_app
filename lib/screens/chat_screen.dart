@@ -735,6 +735,275 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+
+  // ==================== TRANSLATION METHODS ====================
+  String? _getTranslatedText(MessageModel msg) {
+    final key = '${msg.id}_$_myLanguage';
+    return _translatedMessages[key] ?? _translationService.getCached(key);
+  }
+
+  void _showTranslateSendDialog() {
+    final controller = TextEditingController(text: _messageController.text);
+    String selectedLang = 'en';
+    bool loading = false;
+    String? translatedText;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.translate, color: Color(0xFF2196F3)),
+                SizedBox(width: 10),
+                Text('Translate before send'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Your message:',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(controller.text,
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Translate to:',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedLang,
+                        isExpanded: true,
+                        items: TranslationService.languages.entries
+                            .map((e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setDialogState(() {
+                              selectedLang = v;
+                              translatedText = null;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  if (translatedText != null) ...[
+                    const SizedBox(height: 16),
+                    const Text('Translated:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF2196F3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(translatedText!,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              if (translatedText == null)
+                ElevatedButton(
+                  onPressed: loading
+                      ? null
+                      : () async {
+                          setDialogState(() => loading = true);
+                          final result =
+                              await _translationService.translate(
+                            controller.text,
+                            selectedLang,
+                          );
+                          setDialogState(() {
+                            translatedText = result;
+                            loading = false;
+                          });
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2196F3),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Translate'),
+                )
+              else
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _messageController.text = translatedText!;
+                    setState(() {});
+                    _sendMessage();
+                  },
+                  icon: const Icon(Icons.send, size: 18),
+                  label: const Text('Send'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4CAF50),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showTranslateDialog(MessageModel msg) {
+    String selectedLang = _myLanguage;
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.translate, color: Color(0xFF2196F3)),
+                SizedBox(width: 10),
+                Text('Translate'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Original:',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 12)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(msg.text,
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                const SizedBox(height: 16),
+                const Text('Translate to:',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 12)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedLang,
+                      isExpanded: true,
+                      items: TranslationService.languages.entries
+                          .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setDialogState(() => selectedLang = v);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: loading
+                    ? null
+                    : () async {
+                        setDialogState(() => loading = true);
+                        final key = '${msg.id}_$selectedLang';
+                        final translated = await _translationService.translate(
+                          msg.text,
+                          selectedLang,
+                        );
+                        if (translated != null) {
+                          _translationService.cache(key, translated);
+                          if (mounted) {
+                            setState(() {
+                              _translatedMessages[key] = translated;
+                            });
+                          }
+                        }
+                        if (context.mounted) Navigator.pop(context);
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                  foregroundColor: Colors.white,
+                ),
+                child: loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('Translate'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _showGroupInfo() {
     Navigator.push(context, MaterialPageRoute(builder: (_) => GroupInfoScreen(groupId: groupId)));
   }
