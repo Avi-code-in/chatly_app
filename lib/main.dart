@@ -197,33 +197,43 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   void _startIncomingCallListener() {
-    // CallKit event listener
+    // CallKit event listener (3.1.6 API)
     FlutterCallkitIncoming.onEvent.listen((CallEvent? event) {
-      switch (event!.event) {
-        case Event.actionCallAccept:
-          final extra = event.body['extra'] as Map<String, dynamic>?;
-          if (extra != null && navigatorKey.currentState != null) {
-            navigatorKey.currentState!.push(
-              MaterialPageRoute(
-                builder: (_) => CallScreen(
-                  callId: extra['callId'],
-                  otherUserId: extra['callerId'],
-                  otherUserName: event.body['nameCaller'] ?? 'Unknown',
-                  callType: extra['callType'] ?? 'audio',
-                  isCaller: false,
-                ),
+      if (event == null) return;
+
+      // Accept action
+      if (event is CallEventActionCallAccept) {
+        final params = event.callKitParams;
+        final extra = params.extra;
+        if (extra != null && navigatorKey.currentState != null) {
+          navigatorKey.currentState!.push(
+            MaterialPageRoute(
+              builder: (_) => CallScreen(
+                callId: extra['callId'] ?? '',
+                otherUserId: extra['callerId'] ?? '',
+                otherUserName: params.nameCaller ?? 'Unknown',
+                callType: extra['callType'] ?? 'audio',
+                isCaller: false,
               ),
-            );
-          }
-          break;
-        case Event.actionCallDecline:
-          final extra = event.body['extra'] as Map<String, dynamic>?;
-          if (extra != null) {
-            CallService().rejectCall(extra['callId']);
-          }
-          break;
-        default:
-          break;
+            ),
+          );
+        }
+      }
+      // Decline action
+      else if (event is CallEventActionCallDecline) {
+        final params = event.callKitParams;
+        final extra = params.extra;
+        if (extra != null) {
+          CallService().rejectCall(extra['callId']);
+        }
+      }
+      // Ended action
+      else if (event is CallEventActionCallEnded) {
+        final params = event.callKitParams;
+        final extra = params.extra;
+        if (extra != null) {
+          CallService().endCall(extra['callId']);
+        }
       }
     });
 
