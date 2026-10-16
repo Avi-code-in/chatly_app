@@ -40,7 +40,7 @@ class _CallScreenState extends State<CallScreen>
   StreamSubscription? _callStatusSub;
 
   bool _muted = false;
-  bool _videoEnabled = widget.callType == 'video';
+  bool _videoEnabled = false;
   bool _frontCamera = true;
   bool _speakerOn = true;
   bool _connected = false;
@@ -53,6 +53,7 @@ class _CallScreenState extends State<CallScreen>
   @override
   void initState() {
     super.initState();
+    _videoEnabled = widget.callType == 'video';
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),

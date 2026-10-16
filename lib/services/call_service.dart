@@ -107,7 +107,19 @@ class CallService {
 
   // ============ WEBRTC SIGNALING ============
   Future<RTCPeerConnection> createPeerConnection(String callId) async {
-    final pc = await createPeerConnection(_iceServers);
+    final Map<String, dynamic> config = {
+      'iceServers': [
+        {
+          'urls': [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302',
+          ],
+        },
+      ],
+      'sdpSemantics': 'unified-plan',
+    };
+    final pc = await createPeerConnection(config);
 
     // ICE candidates collect karo
     pc.onIceCandidate = (candidate) {
