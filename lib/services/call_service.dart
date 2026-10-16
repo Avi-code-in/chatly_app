@@ -13,21 +13,7 @@ class CallService {
 
   static const String _backendUrl = 'https://chatly-call-backend.onrender.com';
 
-  final Map<String, dynamic> _iceConfig = {
-    'iceServers': [
-      {
-        'urls': [
-          'stun:stun.l.google.com:19302',
-          'stun:stun1.l.google.com:19302',
-          'stun:stun2.l.google.com:19302',
-          'stun:stun3.l.google.com:19302',
-          'stun:stun4.l.google.com:19302',
-        ],
-      },
-    ],
-    'sdpSemantics': 'unified-plan',
-    'iceCandidatePoolSize': 10,
-  };
+
 
   // ==================== START CALL ====================
   Future<String> startCall(String receiverId, String callType) async {
@@ -198,7 +184,20 @@ class CallService {
 
   // ==================== WEBRTC PEER ====================
   Future<RTCPeerConnection> createPeerConnection(String callId) async {
-    final pc = await createPeerConnection(_iceConfig);
+    final config = <String, dynamic>{
+      'iceServers': [
+        {
+          'urls': [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302',
+            'stun:stun3.l.google.com:19302',
+          ],
+        },
+      ],
+      'sdpSemantics': 'unified-plan',
+    };
+    final pc = await createPeerConnection(config);
 
     pc.onIceCandidate = (candidate) {
       if (candidate.candidate != null) {

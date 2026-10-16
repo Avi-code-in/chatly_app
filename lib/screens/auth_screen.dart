@@ -252,30 +252,33 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 20),
 
                   // ==================== CHATLY TEXT ====================
-                  RichText(
-                    text: const TextSpan(
-                      style: TextStyle(
-                        fontSize: 52,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -2,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'Chat',
-                          style: TextStyle(color: Color(0xFF0B1F3A)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Chat',
+                        style: TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -2,
+                          color: Color(0xFF0B1F3A),
                         ),
-                        TextSpan(
-                          text: 'ly',
+                      ),
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Color(0xFF4A90E2), Color(0xFF7C4DFF)],
+                        ).createShader(bounds),
+                        child: const Text(
+                          'ly',
                           style: TextStyle(
-                            foreground: Paint()
-                              ..shader = LinearGradient(
-                                colors: [Color(0xFF4A90E2), Color(0xFF7C4DFF)],
-                              ).createShader(
-                                  const Rect.fromLTWH(0, 0, 60, 60)),
+                            fontSize: 52,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -2,
+                            color: Colors.white,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 6),
@@ -308,31 +311,33 @@ class _AuthScreenState extends State<AuthScreen> {
 
                   // Login to Chatly
                   _isLogin
-                      ? RichText(
-                          text: const TextSpan(
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                              color: Color(0xFF0B1F3A),
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Login to ',
+                              style: TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.5,
+                                color: Color(0xFF0B1F3A),
+                              ),
                             ),
-                            children: [
-                              TextSpan(text: 'Login to '),
-                              TextSpan(
-                                text: 'Chatly',
+                            ShaderMask(
+                              shaderCallback: (bounds) => const LinearGradient(
+                                colors: [Color(0xFF4A90E2), Color(0xFF7C4DFF)],
+                              ).createShader(bounds),
+                              child: const Text(
+                                'Chatly',
                                 style: TextStyle(
-                                  foreground: Paint()
-                                    ..shader = LinearGradient(
-                                      colors: [
-                                        Color(0xFF4A90E2),
-                                        Color(0xFF7C4DFF)
-                                      ],
-                                    ).createShader(
-                                        const Rect.fromLTWH(0, 0, 100, 40)),
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                  color: Colors.white,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         )
                       : const Text(
                           'Create your account',

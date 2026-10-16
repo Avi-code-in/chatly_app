@@ -197,9 +197,9 @@ class _CallScreenState extends State<CallScreen> {
       for (var c in cc) {
         try {
           await _pc?.addCandidate(RTCIceCandidate(
-              c['candidate'] as String,
-              c['sdpMLineIndex'] as int?,
-              c['sdpMid'] as String?));
+              c['candidate'] as String?,
+              c['sdpMid'] as String?,
+              c['sdpMLineIndex'] as int?));
         } catch (_) {}
       }
       if (d['status'] == 'rejected' || d['status'] == 'ended') {
@@ -232,9 +232,9 @@ class _CallScreenState extends State<CallScreen> {
         for (var c in rc) {
           try {
             await _pc?.addCandidate(RTCIceCandidate(
-                c['candidate'] as String,
-                c['sdpMLineIndex'] as int?,
-                c['sdpMid'] as String?));
+                c['candidate'] as String?,
+                c['sdpMid'] as String?,
+                c['sdpMLineIndex'] as int?));
           } catch (_) {}
         }
       }
