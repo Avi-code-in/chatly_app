@@ -299,8 +299,10 @@ class _StatusScreenState extends State<StatusScreen> {
                                             ? (u.photoUrl!
                                                     .startsWith('data:image')
                                                 ? MemoryImage(_b64(u.photoUrl!))
+                                                    as ImageProvider
                                                 : CachedNetworkImageProvider(
-                                                    u.photoUrl!))
+                                                        u.photoUrl!)
+                                                    as ImageProvider)
                                             : null,
                                         child: u.photoUrl == null ||
                                                 u.photoUrl!.isEmpty ||
