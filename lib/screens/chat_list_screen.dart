@@ -86,6 +86,13 @@ class _ChatsTab extends StatefulWidget {
   State<_ChatsTab> createState() => _ChatsTabState();
 }
 
+class _ChatsTab extends StatefulWidget {
+  const _ChatsTab();
+
+  @override
+  State<_ChatsTab> createState() => _ChatsTabState();
+}
+
 class _ChatsTabState extends State<_ChatsTab> {
   int _filterIndex = 0;
   final _chatService = ChatService();
@@ -247,12 +254,7 @@ class _ChatsTabState extends State<_ChatsTab> {
     return SafeArea(
       child: Stack(
         children: [
-          
-                  Colors.transparent,
-                ]),
-              ),
-            ),
-          ),
+          // Cleaned up background (No grey dhabbe)
           Column(
             children: [
               // HEADER
@@ -260,7 +262,6 @@ class _ChatsTabState extends State<_ChatsTab> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Row(
                   children: [
-                    
                     const Text('Chatly',
                         style: TextStyle(
                           fontSize: 30,
@@ -667,7 +668,7 @@ class _ChatsTabState extends State<_ChatsTab> {
                     backgroundColor: Colors.white,
                     backgroundImage: hasImg
                         ? (u.photoUrl!.startsWith('data:image')
-                            ? MemoryImage(_b64(u.photoUrl!))
+                            ? MemoryImage(_b64(u.photoUrl!)) as ImageProvider
                             : CachedNetworkImageProvider(u.photoUrl!) as ImageProvider)
                         : null,
                     child: !hasImg
