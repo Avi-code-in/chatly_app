@@ -134,6 +134,21 @@ class _AuthScreenState extends State<AuthScreen>
       backgroundColor: const Color(0xFFF0F3FF),
       body: Stack(
         children: [
+          // FADED WAVE IN BACKGROUND
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: 0.4,
+                child: SizedBox(
+                  height: 250,
+                  child: CustomPaint(painter: _WavePainter()),
+                ),
+              ),
+            ),
+          ),
           // ============ BACKGROUND ORBS ============
           Positioned(
             top: -100,
@@ -575,68 +590,35 @@ class _AuthScreenState extends State<AuthScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 30),
-                  const SizedBox(height: 220), // space for wave
+
+                  const SizedBox(height: 40),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4A90E2).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.lock_outline, color: Color(0xFF4A90E2), size: 16),
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          'Your data is safe and encrypted. Only your\napproved contacts can message you.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.black.withOpacity(0.5), fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
           ),
 
-          // ============ BOTTOM WAVE + PRIVACY ============
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: SizedBox(
-              height: 240,
-              child: Stack(
-                children: [
-                  // Wave background
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _WavePainter(),
-                    ),
-                  ),
-                  // Privacy text
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 50,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.lock_outline,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            'Your data is safe and encrypted. Only your\napproved contacts can message you.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.95),
-                              fontSize: 12.5,
-                              height: 1.5,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

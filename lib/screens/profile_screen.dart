@@ -384,7 +384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: EdgeInsets.zero,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
@@ -394,8 +394,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               blurRadius: 10),
                         ],
                       ),
-                      child: const Icon(Icons.settings_outlined,
-                          color: Color(0xFF0B1F3A), size: 22),
+                      child: IconButton(
+                        icon: const Icon(Icons.settings_outlined, color: Color(0xFF0B1F3A), size: 22),
+                        onPressed: () => _showNotificationsDialog(), // Temporary settings
+                      ),
                     ),
                   ],
                 ),

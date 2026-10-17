@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import '../services/chat_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/status_model.dart';
@@ -298,7 +299,7 @@ class _StatusScreenState extends State<StatusScreen> {
                                                         .startsWith('http'))
                                             ? (u.photoUrl!
                                                     .startsWith('data:image')
-                                                ? MemoryImage(_b64(u.photoUrl!))
+                                                ? MemoryImage(_b64(u.photoUrl!)) as ImageProvider
                                                     as ImageProvider
                                                 : CachedNetworkImageProvider(
                                                         u.photoUrl!)
@@ -637,11 +638,25 @@ class _StatusViewerState extends State<_StatusViewer> {
               itemCount: widget.statuses.length,
               itemBuilder: (c, i) {
                 final s = widget.statuses[i];
+                
+                // Video Status
+                if (s.type == 'video' && s.videoUrl != null) {
+                  return _VideoStatusPlayer(url: s.videoUrl!);
+                }
+                
+                // Image Status
                 if (s.type == 'image' && s.imageUrl != null) {
                   return Center(
-                      child: CachedNetworkImage(
-                          imageUrl: s.imageUrl!, fit: BoxFit.contain));
+                    child: CachedNetworkImage(
+                      imageUrl: s.imageUrl!,
+                      fit: BoxFit.contain,
+                      placeholder: (c, u) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                      errorWidget: (c, u, e) => const Center(child: Icon(Icons.broken_image, color: Colors.white, size: 50)),
+                    ),
+                  );
                 }
+                
+                // Text Status
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(40),
@@ -691,6 +706,92 @@ class _StatusViewerState extends State<_StatusViewer> {
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== VIDEO PLAYER WIDGET ====================
+class _VideoStatusPlayer extends StatefulWidget {
+  final String url;
+  const _VideoStatusPlayer({required this.url});
+
+  @override
+  State<_VideoStatusPlayer> createState() => _VideoStatusPlayerState();
+}
+
+class _VideoStatusPlayerState extends State<_VideoStatusPlayer> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() => _isInitialized = true);
+          _controller.play();
+          _controller.setLooping(true);
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+    return Center(
+      child: AspectRatio(
+        aspectRatio: _controller.value.aspectRatio,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            VideoPlayer(_controller),
+            VideoProgressIndicator(
+              _controller,
+              allowScrubbing: true,
+              colors: const VideoProgressColors(
+                playedColor: Colors.white,
+                bufferedColor: Colors.white38,
+                backgroundColor: Colors.white12,
+              ),
+            ),
+            Positioned(
+              bottom: 20,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _controller.value.isPlaying
+                        ? _controller.pause()
+                        : _controller.play();
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
               ),
             ),
           ],

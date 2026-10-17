@@ -1142,6 +1142,7 @@ class _ChatScreenState extends State<ChatScreen> {
               case 'block': _blockUser(); break;
               case 'report': _reportUser(); break;
               case 'group_info': _showGroupInfo(); break;
+              default: _snackCall('Feature coming soon'); break;
             }
           },
           itemBuilder: (ctx) => [

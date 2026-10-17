@@ -247,31 +247,7 @@ class _ChatsTabState extends State<_ChatsTab> {
     return SafeArea(
       child: Stack(
         children: [
-          Positioned(
-            top: -80,
-            right: -60,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(colors: [
-                  const Color(0xFFD5DDFF).withOpacity(0.7),
-                  Colors.transparent,
-                ]),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 200,
-            left: -60,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(colors: [
-                  const Color(0xFFE5D9FF).withOpacity(0.5),
+          
                   Colors.transparent,
                 ]),
               ),
@@ -284,8 +260,7 @@ class _ChatsTabState extends State<_ChatsTab> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Row(
                   children: [
-                    _squareBtn(Icons.menu, () {}),
-                    const SizedBox(width: 12),
+                    
                     const Text('Chatly',
                         style: TextStyle(
                           fontSize: 30,
@@ -301,11 +276,11 @@ class _ChatsTabState extends State<_ChatsTab> {
                               builder: (_) => const NewChatScreen()));
                     }),
                     const SizedBox(width: 8),
-                    _squareBtn(Icons.person_add_alt_1, () {
+                    _squareBtn(Icons.group_add_outlined, () {
                       Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const NewChatScreen()));
+                              builder: (_) => const CreateGroupScreen()));
                     }),
                   ],
                 ),
