@@ -291,19 +291,13 @@ class _StatusScreenState extends State<StatusScreen> {
                                       child: CircleAvatar(
                                         radius: 26,
                                         backgroundColor: Colors.white,
-                                        backgroundImage: u.photoUrl != null &&
+                                        backgroundImage: (u.photoUrl != null &&
                                                 u.photoUrl!.isNotEmpty &&
-                                                (u.photoUrl!
-                                                        .startsWith('data:image') ||
-                                                    u.photoUrl!
-                                                        .startsWith('http'))
-                                            ? (u.photoUrl!
-                                                    .startsWith('data:image')
+                                                (u.photoUrl!.startsWith('data:image') ||
+                                                    u.photoUrl!.startsWith('http')))
+                                            ? (u.photoUrl!.startsWith('data:image')
                                                 ? MemoryImage(_b64(u.photoUrl!)) as ImageProvider
-                                                    as ImageProvider
-                                                : CachedNetworkImageProvider(
-                                                        u.photoUrl!)
-                                                    as ImageProvider)
+                                                : CachedNetworkImageProvider(u.photoUrl!) as ImageProvider)
                                             : null,
                                         child: u.photoUrl == null ||
                                                 u.photoUrl!.isEmpty ||
