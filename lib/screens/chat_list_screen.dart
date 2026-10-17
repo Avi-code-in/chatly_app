@@ -86,13 +86,6 @@ class _ChatsTab extends StatefulWidget {
   State<_ChatsTab> createState() => _ChatsTabState();
 }
 
-class _ChatsTab extends StatefulWidget {
-  const _ChatsTab();
-
-  @override
-  State<_ChatsTab> createState() => _ChatsTabState();
-}
-
 class _ChatsTabState extends State<_ChatsTab> {
   int _filterIndex = 0;
   final _chatService = ChatService();
@@ -254,10 +247,9 @@ class _ChatsTabState extends State<_ChatsTab> {
     return SafeArea(
       child: Stack(
         children: [
-          // Cleaned up background (No grey dhabbe)
           Column(
             children: [
-              // HEADER
+              // HEADER (No menu button, exact text, group button)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Row(
@@ -361,6 +353,7 @@ class _ChatsTabState extends State<_ChatsTab> {
               ),
             ],
           ),
+          
           // Request FAB
           Positioned(
             right: 16,
@@ -419,7 +412,8 @@ class _ChatsTabState extends State<_ChatsTab> {
               },
             ),
           ),
-          // Edit FAB
+          
+          // Edit FAB (New Chat)
           Positioned(
             right: 16,
             bottom: 20,
