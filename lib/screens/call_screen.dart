@@ -1,19 +1,17 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../services/call_service.dart';
-import '../services/chat_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/socket_service.dart';
 
 class CallScreen extends StatefulWidget {
   final String callId;
   final String otherUserId;
   final String otherUserName;
   final String? otherUserPhoto;
-  final String callType;
+  final String otherUserEmail; // Phone ki jagah Email
+  final String callType; 
   final bool isCaller;
 
   const CallScreen({
@@ -22,6 +20,7 @@ class CallScreen extends StatefulWidget {
     required this.otherUserId,
     required this.otherUserName,
     this.otherUserPhoto,
+    required this.otherUserEmail,
     required this.callType,
     required this.isCaller,
   });
@@ -31,27 +30,24 @@ class CallScreen extends StatefulWidget {
 }
 
 class _CallScreenState extends State<CallScreen> {
-  final _callService = CallService();
-  final _chatService = ChatService();
+  final _socketService = SocketService();
   final _localRenderer = RTCVideoRenderer();
   final _remoteRenderer = RTCVideoRenderer();
 
   RTCPeerConnection? _pc;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
-  StreamSubscription? _sub;
 
   bool _muted = false;
   bool _videoOn = false;
   bool _frontCam = true;
   bool _speaker = false;
   bool _connected = false;
+  bool _accepted = false;
   bool _ended = false;
-  bool _remoteVideoReady = false;
-  String _status = 'Connecting...';
-  Duration _dur = Duration.zero;
-  Timer? _t;
-  String _contact = '';
+  String _status = 'Calling...';
+  Duration _duration = Duration.zero;
+  Timer? _timer;
 
   bool get isVideo => widget.callType == 'video';
 
@@ -59,89 +55,88 @@ class _CallScreenState extends State<CallScreen> {
   void initState() {
     super.initState();
     _videoOn = isVideo;
-    _loadInfo();
-    _startRing();
-    _initCall();
+    _initRenderers();
+    _setupSocketListeners();
   }
 
-  Future<void> _loadInfo() async {
-    try {
-      final u = await _chatService.getUserById(widget.otherUserId);
-      if (u != null && mounted) {
-        setState(() {
-          _contact = u.email.isNotEmpty
-              ? u.email
-              : (u.phone.isNotEmpty ? u.phone : '@${u.username}');
-        });
-      }
-    } catch (_) {}
+  Future<void> _initRenderers() async {
+    await _localRenderer.initialize();
+    await _remoteRenderer.initialize();
   }
 
-  Future<void> _startRing() async {
-    if (!widget.isCaller) return;
-    try {
-      await FlutterRingtonePlayer().play(
-        android: AndroidSounds.notification,
-        ios: IosSounds.glass,
-        looping: true,
-        volume: 0.4,
-      );
-    } catch (_) {}
-  }
+  void _setupSocketListeners() {
+    _socketService.connect();
 
-  Future<void> _stopRing() async {
-    try {
-      await FlutterRingtonePlayer().stop();
-    } catch (_) {}
-  }
-
-  Future<void> _initCall() async {
-    try {
-      await _localRenderer.initialize();
-      await _remoteRenderer.initialize();
-      await _setupMedia();
-      _pc = await _callService.createCallPeer(widget.callId);
-      _setupPeer();
-
-      if (widget.isCaller) {
-        await _asCaller();
-      } else {
-        _asReceiver();
-      }
-      _listenCall();
-    } catch (e) {
-      print('Init error: $e');
-      if (mounted) setState(() => _status = 'Failed to connect');
+    if (widget.isCaller) {
+      _startCall();
+    } else {
+      setState(() => _status = 'Incoming ${isVideo ? "Video" : "Voice"} Call...');
     }
+
+    _socketService.socket.on('call-accepted', (data) async {
+      if (mounted) setState(() => _accepted = true);
+      await _handleAnswer(data);
+    });
+
+    _socketService.socket.on('call-made', (data) async {
+      if (!widget.isCaller) {
+        await _handleOffer(data);
+      }
+    });
+
+    _socketService.socket.on('ice-candidate', (data) async {
+      if (_pc != null && data['candidate'] != null) {
+        try {
+          await _pc!.addCandidate(RTCIceCandidate(
+            data['candidate']['candidate'],
+            data['candidate']['sdpMid'],
+            data['candidate']['sdpMLineIndex'],
+          ));
+        } catch (e) { print('ICE Error: $e'); }
+      }
+    });
+
+    _socketService.socket.on('call-ended', (data) => _endCallUI(silent: true));
+    _socketService.socket.on('call-rejected', (data) => _endCallUI(silent: true));
   }
 
-  Future<void> _setupMedia() async {
-    final constraints = {
-      'audio': true,
-      'video': isVideo
-          ? {
-              'facingMode': 'user',
-              'width': {'ideal': 1280},
-              'height': {'ideal': 720},
-            }
-          : false,
+  Future<void> _startCall() async {
+    await _setupPeerConnection();
+    await _setupMedia();
+    
+    final offer = await _pc!.createOffer({'offerToReceiveAudio': true, 'offerToReceiveVideo': isVideo});
+    await _pc!.setLocalDescription(offer);
+
+    _socketService.emitCallUser({
+      'callId': widget.callId,
+      'callerId': widget.otherUserId,
+      'receiverId': widget.otherUserId,
+      'callType': widget.callType,
+      'offer': {'sdp': offer.sdp, 'type': offer.type},
+    });
+  }
+
+  Future<void> _acceptCall() async {
+    setState(() { _accepted = true; _status = 'Connecting...'; });
+  }
+
+  Future<void> _setupPeerConnection() async {
+    final config = {
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun1.l.google.com:19302'},
+      ]
     };
-    _localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    _localRenderer.srcObject = _localStream;
+    _pc = await createPeerConnection(config);
 
-    for (var track in _localStream!.getTracks()) {
-      await _pc!.addTrack(track, _localStream!);
-    }
-    if (mounted) setState(() {});
-  }
-
-  void _setupPeer() {
     _pc!.onIceCandidate = (c) {
-      if (c.candidate == null) return;
-      if (widget.isCaller) {
-        _callService.sendCallerCandidate(widget.callId, c);
-      } else {
-        _callService.sendReceiverCandidate(widget.callId, c);
+      if (c.candidate != null) {
+        _socketService.emitIceCandidate({
+          'callId': widget.callId,
+          'candidate': {
+            'candidate': c.candidate, 'sdpMid': c.sdpMid, 'sdpMLineIndex': c.sdpMLineIndex
+          }
+        });
       }
     };
 
@@ -149,536 +144,207 @@ class _CallScreenState extends State<CallScreen> {
       if (event.streams.isNotEmpty) {
         _remoteStream = event.streams[0];
         _remoteRenderer.srcObject = _remoteStream;
-        if (mounted) {
-          setState(() => _remoteVideoReady = true);
-        }
-      }
-    };
-
-    _pc!.onConnectionState = (s) {
-      if (s == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        _markConnected();
-      }
-    };
-
-    _pc!.onIceConnectionState = (s) {
-      if (s == RTCIceConnectionState.RTCIceConnectionStateConnected) {
-        _markConnected();
+        if (mounted) setState(() => _connected = true);
       }
     };
   }
 
-  Future<void> _asCaller() async {
-    final offer = await _pc!.createOffer({
-      'offerToReceiveAudio': true,
-      'offerToReceiveVideo': isVideo,
-    });
-    await _pc!.setLocalDescription(offer);
-    await _callService.sendOffer(widget.callId, offer);
-  }
+  Future<void> _setupMedia() async {
+    await [Permission.microphone, Permission.camera].request();
+    final constraints = {
+      'audio': true,
+      'video': isVideo ? {'facingMode': 'user'} : false,
+    };
+    _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    _localRenderer.srcObject = _localStream;
 
-  void _asReceiver() {
-    _callService.listenCallStatus(widget.callId).listen((doc) async {
-      if (!doc.exists) return;
-      final d = doc.data() as Map<String, dynamic>?;
-      if (d == null) return;
-
-      // Handle offer
-      final offerData = d['offer'] as Map<String, dynamic>?;
-      if (offerData != null && _pc?.getRemoteDescription() == null) {
-        try {
-          await _pc!.setRemoteDescription(
-            RTCSessionDescription(
-              offerData['sdp'] as String,
-              offerData['type'] as String,
-            ),
-          );
-          final ans = await _pc!.createAnswer({
-            'offerToReceiveAudio': true,
-            'offerToReceiveVideo': isVideo,
-          });
-          await _pc!.setLocalDescription(ans);
-          await _callService.sendAnswer(widget.callId, ans);
-        } catch (e) {
-          print('Offer/Answer error: $e');
-        }
-      }
-
-      // Add caller ICE
-      final cc = d['callerCandidates'] as List<dynamic>? ?? [];
-      for (var c in cc) {
-        try {
-          await _pc?.addCandidate(RTCIceCandidate(
-            c['candidate'] as String?,
-            c['sdpMid'] as String?,
-            c['sdpMLineIndex'] as int?,
-          ));
-        } catch (_) {}
-      }
-
-      if (d['status'] == 'rejected' || d['status'] == 'ended') {
-        if (mounted && !_ended) _end(silent: true);
-      }
-    });
-  }
-
-  void _listenCall() {
-    _sub = _callService.listenCallStatus(widget.callId).listen((doc) async {
-      if (!doc.exists) return;
-      final d = doc.data() as Map<String, dynamic>?;
-      if (d == null) return;
-
-      // Caller: handle answer
-      if (widget.isCaller &&
-          d['status'] == 'accepted' &&
-          d['answer'] != null &&
-          _pc?.getRemoteDescription() == null) {
-        try {
-          final ans = d['answer'] as Map<String, dynamic>;
-          await _pc!.setRemoteDescription(
-            RTCSessionDescription(
-              ans['sdp'] as String,
-              ans['type'] as String,
-            ),
-          );
-        } catch (e) {
-          print('Answer error: $e');
-        }
-      }
-
-      // Caller: add receiver ICE
-      if (widget.isCaller) {
-        final rc = d['receiverCandidates'] as List<dynamic>? ?? [];
-        for (var c in rc) {
-          try {
-            await _pc?.addCandidate(RTCIceCandidate(
-              c['candidate'] as String?,
-              c['sdpMid'] as String?,
-              c['sdpMLineIndex'] as int?,
-            ));
-          } catch (_) {}
-        }
-      }
-
-      if (d['status'] == 'rejected' || d['status'] == 'ended') {
-        if (mounted && !_ended) _end(silent: true);
-      }
-    });
-  }
-
-  void _markConnected() {
-    if (_connected || _ended) return;
-    _stopRing();
-    if (mounted) {
-      setState(() {
-        _connected = true;
-        _status = '00:00';
-      });
+    for (var track in _localStream!.getTracks()) {
+      await _pc!.addTrack(track, _localStream!);
     }
-    _t?.cancel();
-    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+  }
+
+  Future<void> _handleOffer(dynamic data) async {
+    await _setupPeerConnection();
+    await _setupMedia();
+    
+    await _pc!.setRemoteDescription(RTCSessionDescription(data['offer']['sdp'], data['offer']['type']));
+    final answer = await _pc!.createAnswer({'offerToReceiveAudio': true, 'offerToReceiveVideo': isVideo});
+    await _pc!.setLocalDescription(answer);
+
+    _socketService.emitAnswerCall({
+      'callId': widget.callId,
+      'answer': {'sdp': answer.sdp, 'type': answer.type}
+    });
+  }
+
+  Future<void> _handleAnswer(dynamic data) async {
+    if (_pc != null) {
+      await _pc!.setRemoteDescription(RTCSessionDescription(data['answer']['sdp'], data['answer']['type']));
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (mounted && !_ended) {
         setState(() {
-          _dur += const Duration(seconds: 1);
-          _status = _fmt(_dur);
+          _duration += const Duration(seconds: 1);
+          _status = _formatDuration(_duration);
         });
       }
     });
   }
 
-  Future<void> _toggleMute() async {
-    if (_localStream == null) return;
-    for (var t in _localStream!.getAudioTracks()) {
-      t.enabled = !t.enabled;
-    }
-    setState(() => _muted = !_muted);
+  String _formatDuration(Duration d) {
+    String m = d.inMinutes.toString().padLeft(2, '0');
+    String s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return "$m:$s";
   }
 
-  Future<void> _toggleVideo() async {
-    if (_localStream == null || !isVideo) return;
-    for (var t in _localStream!.getVideoTracks()) {
-      t.enabled = !t.enabled;
-    }
-    setState(() => _videoOn = !_videoOn);
-  }
-
-  Future<void> _toggleSpeaker() async {
-    try {
-      await Helper.setSpeakerphoneOn(!_speaker);
-    } catch (_) {}
-    setState(() => _speaker = !_speaker);
-  }
-
-  Future<void> _switchCam() async {
-    if (_localStream == null) return;
-    final tracks = _localStream!.getVideoTracks();
-    if (tracks.isNotEmpty) {
-      await Helper.switchCamera(tracks.first);
-      setState(() => _frontCam = !_frontCam);
-    }
-  }
-
-  Future<void> _end({bool silent = false}) async {
+  Future<void> _endCallUI({bool silent = false}) async {
     if (_ended) return;
-    _ended = true;
-    await _stopRing();
-    if (!silent) await _callService.endCall(widget.callId);
-    _t?.cancel();
+    setState(() => _ended = true);
+    
+    if (!silent) {
+      _socketService.emitEndCall({'callId': widget.callId});
+    }
+
+    _timer?.cancel();
     await _localStream?.dispose();
     await _pc?.close();
     _localRenderer.srcObject = null;
     _remoteRenderer.srcObject = null;
-    if (mounted) setState(() {});
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (mounted) Navigator.pop(context);
   }
 
-  void _snack(String m) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(m), duration: const Duration(seconds: 2)),
-    );
+  void _toggleMute() {
+    _localStream?.getAudioTracks().forEach((t) => t.enabled = !t.enabled);
+    setState(() => _muted = !_muted);
   }
 
-  String _fmt(Duration d) {
-    final m = d.inMinutes.toString().padLeft(2, '0');
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+  void _toggleVideo() {
+    _localStream?.getVideoTracks().forEach((t) => t.enabled = !t.enabled);
+    setState(() => _videoOn = !_videoOn);
   }
 
-  bool _hasImg(String? u) {
-    if (u == null || u.isEmpty) return false;
-    return u.startsWith('data:image') || u.startsWith('http');
+  void _switchCamera() {
+    if (_localStream != null) {
+      Helper.switchCamera(_localStream!.getVideoTracks().first);
+      setState(() => _frontCam = !_frontCam);
+    }
+  }
+
+  void _toggleSpeaker() {
+    Helper.setSpeakerphoneOn(!_speaker);
+    setState(() => _speaker = !_speaker);
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
-    _t?.cancel();
+    _socketService.socket.off('call-accepted');
+    _socketService.socket.off('call-made');
+    _socketService.socket.off('ice-candidate');
+    _socketService.socket.off('call-ended');
+    _socketService.socket.off('call-rejected');
     _localRenderer.dispose();
     _remoteRenderer.dispose();
-    _localStream?.dispose();
-    _remoteStream?.dispose();
-    _pc?.close();
-    _stopRing();
+    _timer?.cancel();
     super.dispose();
   }
 
-  // ==================== BUILD ====================
+  // ================= UI BUILDING =================
   @override
   Widget build(BuildContext context) {
-    if (_ended) return _endedScreen();
-    if (isVideo && _connected && _remoteVideoReady) return _videoConnected();
-    if (isVideo) return _videoWaiting();
-    return _voiceScreen();
+    if (_ended) return _buildEndedScreen();
+    if (isVideo && _connected && _accepted) return _buildVideoActiveScreen();
+    if (isVideo && !_accepted && widget.isCaller) return _buildOutgoingVideoScreen();
+    if (isVideo && !_accepted && !widget.isCaller) return _buildIncomingVideoScreen();
+    
+    if (!_accepted && !widget.isCaller) return _buildIncomingVoiceScreen();
+    if (_accepted || widget.isCaller) return _buildVoiceActiveScreen();
+
+    return _buildIncomingVoiceScreen();
   }
 
-  // ==================== BACKGROUND ====================
-  BoxDecoration get _bgDeco => const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0, -0.6),
-          radius: 1.4,
-          colors: [
-            Color(0xFF1E4976),
-            Color(0xFF0A1A2E),
-            Color(0xFF050B14),
-          ],
-          stops: [0.0, 0.5, 1.0],
-        ),
-      );
+  BoxDecoration get _bgGradient => const BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xFF06142E), Color(0xFF0B224A), Color(0xFF071021)],
+    ),
+  );
 
-  // ==================== TOP BAR ====================
-  Widget _topBar() => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-          child: Row(
-            children: [
-              if (widget.isCaller)
-                GestureDetector(
-                  onTap: () => _end(),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                )
-              else
-                const SizedBox(width: 38),
-              const Spacer(),
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF4A90E2), Color(0xFF2874C7)],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.chat_bubble,
-                  color: Colors.white,
-                  size: 15,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Chatly',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              const Spacer(),
-              const SizedBox(width: 38),
-            ],
-          ),
-        ),
-      );
-
-  // ==================== AVATAR ====================
-  Widget _avatar(double r) {
-    final has = _hasImg(widget.otherUserPhoto);
+  Widget _avatar({double size = 120}) {
     return Container(
-      width: r * 2,
-      height: r * 2,
+      width: size, height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF4A90E2).withOpacity(0.35),
-            blurRadius: 40,
-            spreadRadius: 5,
-          ),
+          BoxShadow(color: Colors.blue.withOpacity(0.4), blurRadius: 30, spreadRadius: 5),
         ],
       ),
       child: Container(
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withOpacity(0.9),
-            width: 2.5,
-          ),
+          border: Border.all(color: Colors.white, width: 2.5),
         ),
         child: ClipOval(
-          child: has
-              ? (widget.otherUserPhoto!.startsWith('data:image')
-                  ? Image.memory(
-                      base64Decode(widget.otherUserPhoto!.split(',').last),
-                      fit: BoxFit.cover,
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: widget.otherUserPhoto!,
-                      fit: BoxFit.cover,
-                      errorWidget: (c, u, e) => _avatarFallback(r),
-                    ))
-              : _avatarFallback(r),
+          child: widget.otherUserPhoto != null
+              ? CachedNetworkImage(imageUrl: widget.otherUserPhoto!, fit: BoxFit.cover)
+              : Container(
+                  color: Colors.blueGrey[800],
+                  child: Center(child: Text(widget.otherUserName[0].toUpperCase(), style: TextStyle(fontSize: size * 0.4, color: Colors.white))),
+                ),
         ),
       ),
     );
   }
 
-  Widget _avatarFallback(double r) => Container(
-        color: const Color(0xFF3B82F6),
-        child: Center(
-          child: Text(
-            widget.otherUserName.isNotEmpty
-                ? widget.otherUserName[0].toUpperCase()
-                : '?',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: r * 0.85,
-              fontWeight: FontWeight.w600,
+  Widget _iconBtn(IconData icon, String label, VoidCallback onTap, {bool active = false, Color? color}) {
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              color: active ? Colors.white : (color ?? Colors.white.withOpacity(0.1)),
+              shape: BoxShape.circle,
             ),
+            child: Icon(icon, color: active ? Colors.black : (color != null ? Colors.white : Colors.white), size: 26),
           ),
         ),
-      );
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+      ],
+    );
+  }
 
-  // ==================== CIRCLE BUTTON ====================
-  Widget _btn({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool active = false,
-  }) =>
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: onTap,
-            child: Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: active
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                color: active ? const Color(0xFF06101E) : Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      );
-
-  // ==================== END BUTTON ====================
-  Widget _endBtn() => GestureDetector(
-        onTap: () => _end(),
-        child: Container(
-          width: 68,
-          height: 68,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFF4A4A), Color(0xFFE53935)],
-            ),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF4A4A).withOpacity(0.5),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.call_end, color: Colors.white, size: 30),
-        ),
-      );
-
-  // ==================== INCOMING/RINGING ====================
-  Widget _voiceScreen() {
-    final incoming = !widget.isCaller && !_connected;
-
+  Widget _buildIncomingVoiceScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF06101E),
       body: Container(
-        decoration: _bgDeco,
+        decoration: _bgGradient,
         child: SafeArea(
           child: Column(
             children: [
-              _topBar(),
-              const SizedBox(height: 20),
-              Text(
-                widget.isCaller
-                    ? (isVideo ? 'Outgoing video call...' : 'Calling...')
-                    : (isVideo
-                        ? 'Incoming video call...'
-                        : 'Incoming voice call...'),
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.75),
-                  fontSize: 15,
-                ),
-              ),
+              const SizedBox(height: 40),
+              const Text("Incoming voice call...", style: TextStyle(color: Colors.white70, fontSize: 16)),
               const Spacer(),
-              _avatar(65),
-              const SizedBox(height: 28),
-              Text(
-                widget.otherUserName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              _avatar(size: 130),
+              const SizedBox(height: 24),
+              Text(widget.otherUserName, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              if (_contact.isNotEmpty)
-                Text(
-                  _contact,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 15,
-                  ),
-                ),
-              if (_connected) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _status,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.75),
-                    fontSize: 15,
-                  ),
-                ),
-              ],
-              const Spacer(flex: 2),
-
-              // ============ INCOMING: Decline + Accept ============
-              if (incoming)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _actionBtn(
-                        icon: Icons.call_end,
-                        label: 'Decline',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFF4A4A), Color(0xFFE53935)],
-                        ),
-                        onTap: () async {
-                          await _callService.rejectCall(widget.callId);
-                          if (mounted) Navigator.pop(context);
-                        },
-                      ),
-                      _actionBtn(
-                        icon: isVideo ? Icons.videocam : Icons.call,
-                        label: 'Accept',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4CAF50), Color(0xFF2E7D32)],
-                        ),
-                        onTap: () async {
-                          await _callService.acceptCall(widget.callId);
-                        },
-                      ),
-                    ],
-                  ),
-                )
-
-              // ============ OUTGOING / CONNECTED ============
-              else ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _btn(
-                      icon: _muted ? Icons.mic_off : Icons.mic,
-                      label: 'Mute',
-                      active: _muted,
-                      onTap: _toggleMute,
-                    ),
-                    const SizedBox(width: 22),
-                    _btn(
-                      icon: _speaker ? Icons.volume_up : Icons.volume_down,
-                      label: 'Speaker',
-                      active: _speaker,
-                      onTap: _toggleSpeaker,
-                    ),
-                    const SizedBox(width: 22),
-                    _btn(
-                      icon: Icons.chat_bubble_outline,
-                      label: 'Chat',
-                      onTap: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-                _endBtn(),
-              ],
+              Text(widget.otherUserEmail, style: const TextStyle(color: Colors.white70, fontSize: 16)), // Email yahan dikh rahi hai
+              const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _iconBtn(Icons.call_end, "Decline", () => _endCallUI(), color: Colors.red),
+                  _iconBtn(Icons.call, "Accept", () { _acceptCall(); }, color: Colors.green),
+                ],
+              ),
+              const SizedBox(height: 20),
+              TextButton.icon(onPressed: () {}, icon: const Icon(Icons.message, color: Colors.white), label: const Text("Message", style: TextStyle(color: Colors.white))),
               const SizedBox(height: 40),
             ],
           ),
@@ -687,245 +353,146 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  // ==================== ACTION BUTTON (Incoming) ====================
-  Widget _actionBtn({
-    required IconData icon,
-    required String label,
-    required Gradient gradient,
-    required VoidCallback onTap,
-  }) =>
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: onTap,
-            child: Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                gradient: gradient,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: gradient.colors.first.withOpacity(0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 30),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      );
-
-  // ==================== VIDEO WAITING ====================
-  Widget _videoWaiting() {
+  Widget _buildOutgoingVideoScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF06101E),
-      body: Stack(
-        children: [
-          Positioned.fill(child: Container(decoration: _bgDeco)),
-          Positioned.fill(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: Container(
+        decoration: _bgGradient,
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              const Text("Calling...", style: TextStyle(color: Colors.white70, fontSize: 16)),
+              const Spacer(),
+              _avatar(size: 120),
+              const SizedBox(height: 24),
+              Text(widget.otherUserName, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(widget.otherUserEmail, style: const TextStyle(color: Colors.white70, fontSize: 16)), // Email yahan dikh rahi hai
+              const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _avatar(65),
-                  const SizedBox(height: 28),
-                  Text(
-                    widget.otherUserName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _connected ? _status : 'Connecting...',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 15,
-                    ),
-                  ),
+                  _iconBtn(Icons.mic_off, "Mute", _toggleMute, active: _muted),
+                  _iconBtn(Icons.dialpad, "Keypad", () {}),
+                  _iconBtn(Icons.volume_up, "Speaker", _toggleSpeaker, active: _speaker),
                 ],
               ),
-            ),
+              const SizedBox(height: 30),
+              _iconBtn(Icons.call_end, "", () => _endCallUI(), color: Colors.red),
+              const SizedBox(height: 50),
+            ],
           ),
-          if (_localRenderer.srcObject != null && _videoOn)
-            Positioned(
-              top: 90,
-              right: 20,
-              child: GestureDetector(
-                onTap: _switchCam,
-                child: Container(
-                  width: 110,
-                  height: 160,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.5),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.4),
-                        blurRadius: 15,
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: RTCVideoView(
-                      _localRenderer,
-                      mirror: _frontCam,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          _topBar(),
-          _videoBottomBar(),
-        ],
+        ),
       ),
     );
   }
 
-  // ==================== VIDEO CONNECTED ====================
-  Widget _videoConnected() {
+  Widget _buildVoiceActiveScreen() {
+    if (!_connected && _accepted) _startTimer();
+    return Scaffold(
+      body: Container(
+        decoration: _bgGradient,
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 60),
+              _avatar(size: 120),
+              const SizedBox(height: 24),
+              Text(widget.otherUserName, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(_status, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+              const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _iconBtn(Icons.mic_off, "Mute", _toggleMute, active: _muted),
+                  _iconBtn(Icons.dialpad, "Keypad", () {}),
+                  _iconBtn(Icons.volume_up, "Speaker", _toggleSpeaker, active: _speaker),
+                  _iconBtn(Icons.more_horiz, "More", () {}),
+                ],
+              ),
+              const SizedBox(height: 40),
+              _iconBtn(Icons.call_end, "", () => _endCallUI(), color: Colors.red),
+              const SizedBox(height: 50),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIncomingVideoScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: _bgGradient,
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              const Text("Incoming video call...", style: TextStyle(color: Colors.white70, fontSize: 16)),
+              const Spacer(),
+              _avatar(size: 130),
+              const SizedBox(height: 24),
+              Text(widget.otherUserName, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(widget.otherUserEmail, style: const TextStyle(color: Colors.white70, fontSize: 16)), // Email yahan dikh rahi hai
+              const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _iconBtn(Icons.call_end, "Decline", () => _endCallUI(), color: Colors.red),
+                  _iconBtn(Icons.videocam, "Accept", () { _acceptCall(); }, color: Colors.green),
+                ],
+              ),
+              const SizedBox(height: 20),
+              TextButton.icon(onPressed: () {}, icon: const Icon(Icons.message, color: Colors.white), label: const Text("Message", style: TextStyle(color: Colors.white))),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoActiveScreen() {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(
-            child: RTCVideoView(
-              _remoteRenderer,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+            child: RTCVideoView(_remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
+          ),
+          Positioned(
+            top: 50, left: 20,
+            child: SafeArea(
+              child: Text(_status, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           ),
-          if (_localRenderer.srcObject != null && _videoOn)
-            Positioned(
-              top: 90,
-              right: 20,
-              child: GestureDetector(
-                onTap: _switchCam,
-                child: Container(
-                  width: 110,
-                  height: 160,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.5),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 15,
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: RTCVideoView(
-                      _localRenderer,
-                      mirror: _frontCam,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 180,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.5),
-                    Colors.transparent,
-                  ],
+            top: 50, right: 20,
+            child: SafeArea(
+              child: Container(
+                width: 100, height: 150,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: RTCVideoView(_localRenderer, mirror: _frontCam, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
                 ),
               ),
             ),
           ),
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 220,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.75),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          _topBar(),
-          // Timer top-left
-          Positioned(
-            top: 70,
-            left: 20,
-            child: Text(
-              _status,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          // Bottom controls
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
+            bottom: 40, left: 0, right: 0,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _btn(
-                  icon: _muted ? Icons.mic_off : Icons.mic,
-                  label: 'Mute',
-                  active: _muted,
-                  onTap: _toggleMute,
-                ),
-                const SizedBox(width: 22),
-                _btn(
-                  icon: _videoOn ? Icons.videocam : Icons.videocam_off,
-                  label: 'Camera',
-                  active: !_videoOn,
-                  onTap: _toggleVideo,
-                ),
-                const SizedBox(width: 22),
-                _btn(
-                  icon: Icons.flip_camera_ios,
-                  label: 'Switch',
-                  onTap: _switchCam,
-                ),
-                const SizedBox(width: 22),
-                _endBtn(),
+                _iconBtn(Icons.mic_off, "Mute", _toggleMute, active: _muted),
+                _iconBtn(Icons.videocam_off, "Camera", _toggleVideo, active: !_videoOn),
+                _iconBtn(Icons.flip_camera_ios, "Switch", _switchCamera),
+                _iconBtn(Icons.call_end, "", () => _endCallUI(), color: Colors.red),
               ],
             ),
           ),
@@ -934,140 +501,47 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  // ==================== VIDEO BOTTOM BAR (waiting) ====================
-  Widget _videoBottomBar() => Positioned(
-        bottom: 40,
-        left: 0,
-        right: 0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _btn(
-              icon: _muted ? Icons.mic_off : Icons.mic,
-              label: 'Mute',
-              active: _muted,
-              onTap: _toggleMute,
-            ),
-            const SizedBox(width: 22),
-            _btn(
-              icon: _videoOn ? Icons.videocam : Icons.videocam_off,
-              label: 'Camera',
-              active: !_videoOn,
-              onTap: _toggleVideo,
-            ),
-            const SizedBox(width: 22),
-            _btn(
-              icon: Icons.flip_camera_ios,
-              label: 'Switch',
-              onTap: _switchCam,
-            ),
-            const SizedBox(width: 22),
-            _endBtn(),
-          ],
-        ),
-      );
-
-  // ==================== ENDED ====================
-  Widget _endedScreen() => Scaffold(
-        backgroundColor: const Color(0xFF06101E),
-        body: Container(
-          decoration: _bgDeco,
-          child: SafeArea(
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-                Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const RadialGradient(
-                      colors: [Color(0xFF1E3A5F), Color(0xFF0A1628)],
+  Widget _buildEndedScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: _bgGradient,
+        child: SafeArea(
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+              Container(
+                width: 140, height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.blue.withOpacity(0.1),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3), width: 2),
+                ),
+                child: const Center(child: Icon(Icons.call_end, color: Colors.blue, size: 60)),
+              ),
+              const SizedBox(height: 30),
+              const Text("Call Ended", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              Text("You've ended the call with ${widget.otherUserName}", style: const TextStyle(color: Colors.white70, fontSize: 15)),
+              const Spacer(flex: 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    height: 55, width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFF4A90E2), Color(0xFF2E5EBA)]),
+                      borderRadius: BorderRadius.circular(30),
                     ),
-                    border: Border.all(
-                      color: const Color(0xFF3B82F6).withOpacity(0.4),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF3B82F6).withOpacity(0.25),
-                        blurRadius: 50,
-                        spreadRadius: 8,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 90,
-                      height: 90,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF4A90E2), Color(0xFF2874C7)],
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.call_end,
-                        color: Colors.white,
-                        size: 42,
-                      ),
-                    ),
+                    child: const Center(child: Text("Back to Chat", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
                   ),
                 ),
-                const SizedBox(height: 40),
-                const Text(
-                  'Call Ended',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'You\'ve ended the call with ${widget.otherUserName}',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.65),
-                    fontSize: 15,
-                  ),
-                ),
-                const Spacer(flex: 3),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 60),
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      height: 54,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4A90E2), Color(0xFF2874C7)],
-                        ),
-                        borderRadius: BorderRadius.circular(27),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF4A90E2).withOpacity(0.4),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'Back to Chat',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 60),
-              ],
-            ),
+              ),
+              const SizedBox(height: 60),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }
